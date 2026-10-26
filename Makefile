@@ -19,7 +19,7 @@ DIST      := dist
 HOST_OS   := $(shell $(GO) env GOOS)
 HOST_ARCH := $(shell $(GO) env GOARCH)
 
-.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean
+.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean studio studio-windows
 
 all: check build
 
@@ -71,8 +71,18 @@ smoke: build ## Build a converter for this machine and check it converts like th
 	cmp $(DIST)/smoke-output.csv testdata/acme-orders/output.csv
 	@echo "  converter $(HOST_OS)/$(HOST_ARCH) output matches the golden file: ok"
 
+# Studio is a separate Go module (studio/) needing Node.js and, on macOS,
+# Xcode command line tools; the Wails CLI is a Go tool dependency of it.
+STUDIO_FLAGS := -clean -trimpath -ldflags "-s -w -X lmmtfy/internal/version.Version=$(VERSION)"
+
+studio: runners ## Build lmmtfy Studio for this machine into studio/build/bin/
+	cd studio && CGO_ENABLED=1 $(GO) tool wails build $(STUDIO_FLAGS)
+
+studio-windows: runners ## Build lmmtfy Studio for Windows (cross-compiled) into studio/build/bin/
+	cd studio && $(GO) tool wails build $(STUDIO_FLAGS) -platform windows/amd64
+
 check: fmt-check vet test ## Formatting, vet and tests
 
 clean: ## Remove build output
-	rm -rf $(DIST)
+	rm -rf $(DIST) studio/build/bin
 	find $(RUNNER_DIR) -type f ! -name .gitkeep -delete

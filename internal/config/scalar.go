@@ -55,8 +55,8 @@ func line(node ast.Node) int {
 
 // Pair is one entry of a ValueMap.
 type Pair struct {
-	From string
-	To   string
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // ValueMap is an ordered `from: to` mapping of cell values, with keys and

@@ -1,0 +1,449 @@
+// Package studio is the logic behind lmmtfy Studio, the desktop editor. It
+// has no user interface code: the Wails app in studio/ only calls these
+// functions and shows their results, so everything here is plain Go, tested
+// like the rest of lmmtfy.
+//
+// Calls are stateless: the editor sends the mapping being edited with each
+// call, as JSON. The mapping is a config.Mapping whose target is inline.
+package studio
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"lmmtfy/internal/app"
+	"lmmtfy/internal/build"
+	"lmmtfy/internal/config"
+	"lmmtfy/internal/csvio"
+	"lmmtfy/internal/detect"
+	"lmmtfy/internal/engine"
+	"lmmtfy/internal/report"
+	"lmmtfy/internal/runners"
+)
+
+// PreviewRows is the number of rows shown in previews.
+const PreviewRows = 100
+
+// Opened is a CSV file opened in Studio: what detection found, and a draft
+// mapping built from it.
+type Opened struct {
+	Path      string          `json:"path"`
+	Detection *detect.Result  `json:"detection"`
+	Mapping   *config.Mapping `json:"mapping"`
+}
+
+// Open detects the format of a CSV file and proposes a mapping for it, as
+// `lmmtfy init` does.
+func Open(path string) (*Opened, error) {
+	res, err := detect.File(path, detect.Options{})
+	if err != nil {
+		return nil, err
+	}
+	base := filepath.Base(path)
+	name := detect.TargetName(strings.TrimSuffix(base, filepath.Ext(base)), 1)
+	data, err := app.RenderMapping(name, base, res)
+	if err != nil {
+		return nil, err
+	}
+	m, err := config.ParseMapping(data)
+	if err != nil {
+		return nil, err
+	}
+	m.ApplyDefaults()
+	return &Opened{Path: path, Detection: res, Mapping: m}, nil
+}
+
+// RawRow is one record of the input as read with the current input
+// options, before any mapping.
+type RawRow struct {
+	Line   int      `json:"line"`
+	Kind   string   `json:"kind"` // "skipped", "header", "data" or "footer"
+	Fields []string `json:"fields"`
+}
+
+// Raw is the input preview of the reading step.
+type Raw struct {
+	Rows  []RawRow `json:"rows"`
+	Width int      `json:"width"` // most common field count
+	Error string   `json:"error,omitempty"`
+}
+
+// ReadRaw reads the first rows of a file with the given input options, and
+// tells which rows are skipped, header, data or footer. Lines above the
+// header are read as records too, so the user sees what is skipped.
+func ReadRaw(path string, in config.Input) (*Raw, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	m := &config.Mapping{Input: in}
+	m.ApplyDefaults()
+	in = m.Input
+
+	r, err := csvio.NewReader(f, csvio.ReaderOptions{
+		Dialect:       csvio.Dialect{Delimiter: config.Char(in.Delimiter), Quote: config.Char(in.Quote), Escape: csvio.Escape(in.Escape)},
+		Encoding:      in.Encoding,
+		BOM:           string(in.BOM),
+		CommentPrefix: string(in.CommentPrefix),
+	})
+	if err != nil {
+		return &Raw{Error: err.Error()}, nil
+	}
+
+	raw := &Raw{}
+	limit := in.HeaderRow + in.SkipRowsAfterHeader + PreviewRows + in.SkipFooter
+	eof, headerSeen, afterHeader := false, false, 0
+	for len(raw.Rows) < limit {
+		rec, err := r.Read()
+		if errors.Is(err, io.EOF) {
+			eof = true
+			break
+		}
+		if err != nil {
+			raw.Error = err.Error()
+			break
+		}
+		kind := "data"
+		switch {
+		case rec.Line < in.HeaderRow:
+			kind = "skipped"
+		case *in.Header && !headerSeen:
+			kind, headerSeen = "header", true
+		case *in.Header && afterHeader < in.SkipRowsAfterHeader:
+			kind = "skipped"
+			afterHeader++
+		}
+		raw.Rows = append(raw.Rows, RawRow{Line: rec.Line, Kind: kind, Fields: rec.Fields})
+	}
+	if eof {
+		marked := 0
+		for i := len(raw.Rows) - 1; i >= 0 && marked < in.SkipFooter; i-- {
+			if raw.Rows[i].Kind == "data" {
+				raw.Rows[i].Kind = "footer"
+				marked++
+			}
+		}
+	}
+	counts := map[int]int{}
+	for _, row := range raw.Rows {
+		if row.Kind == "data" || row.Kind == "header" {
+			counts[len(row.Fields)]++
+			if counts[len(row.Fields)] > counts[raw.Width] {
+				raw.Width = len(row.Fields)
+			}
+		}
+	}
+	return raw, nil
+}
+
+// Issue is a configuration problem, for display.
+type Issue struct {
+	Severity string `json:"severity"` // "error" or "warning"
+	Path     string `json:"path"`
+	Message  string `json:"message"`
+}
+
+// Check validates a mapping as `lmmtfy validate` does.
+func Check(m *config.Mapping) []Issue {
+	_, issues := compile(m)
+	return issues
+}
+
+func compile(m *config.Mapping) (*engine.Plan, []Issue) {
+	m = clone(m)
+	m.ApplyDefaults()
+	plan, issues := engine.Compile(m)
+	out := make([]Issue, len(issues))
+	for i, is := range issues {
+		out[i] = Issue{Severity: is.Severity.String(), Path: is.Path, Message: is.Message}
+	}
+	return plan, out
+}
+
+// clone deep-copies a mapping through JSON, so that applying defaults never
+// changes the editor's copy.
+func clone(m *config.Mapping) *config.Mapping {
+	data, _ := json.Marshal(m)
+	var c config.Mapping
+	json.Unmarshal(data, &c)
+	return &c
+}
+
+// Event is a log event of a conversion: an error, warning or note.
+type Event struct {
+	Level   string `json:"level"`
+	Line    int    `json:"line,omitempty"`
+	Column  string `json:"column,omitempty"`
+	Message string `json:"message"`
+}
+
+// Result is the outcome of a conversion or a preview.
+type Result struct {
+	Issues   []Issue         `json:"issues,omitempty"`
+	Header   []string        `json:"header,omitempty"`
+	Rows     [][]string      `json:"rows,omitempty"`     // output rows (previews only)
+	Rejected [][]string      `json:"rejected,omitempty"` // reject file rows, header first (previews only)
+	Events   []Event         `json:"events,omitempty"`
+	Summary  *report.Summary `json:"summary,omitempty"`
+	Failure  string          `json:"failure,omitempty"`
+	Rejects  string          `json:"rejects,omitempty"` // reject file written (conversions only)
+}
+
+// PreviewOutput converts the first rows of a file in memory and returns the
+// output, the rejected rows and the log events. Nothing is written to disk.
+func PreviewOutput(path string, m *config.Mapping) (*Result, error) {
+	plan, issues := compile(m)
+	res := &Result{Issues: issues}
+	if plan == nil {
+		return res, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var out, rejects, log bytes.Buffer
+	job := engine.Job{
+		Input:   f,
+		Output:  &out,
+		Rejects: func() (io.Writer, error) { return &rejects, nil },
+		Log:     report.NewLogger(&log, report.LevelWarnings, "json", nil),
+		MaxRows: PreviewRows,
+	}
+	sum, err := plan.Run(job)
+	res.Summary = sum
+	if err != nil {
+		res.Failure = err.Error()
+	}
+	res.Events = parseEvents(&log)
+
+	o := plan.Mapping.Target.Inline.Output
+	rows := readBack(out.Bytes(), csvio.Dialect{Delimiter: config.Char(o.Delimiter), Quote: config.Char(o.Quote), Escape: csvio.Escape(o.Escape)}, o.Encoding)
+	if *o.Header && len(rows) > 0 {
+		res.Header, rows = rows[0], rows[1:]
+	}
+	res.Rows = rows
+	in := plan.Mapping.Input
+	res.Rejected = readBack(rejects.Bytes(), csvio.Dialect{Delimiter: config.Char(in.Delimiter), Quote: config.Char(in.Quote), Escape: csvio.EscapeDouble}, in.Encoding)
+	return res, nil
+}
+
+func readBack(data []byte, d csvio.Dialect, encoding string) [][]string {
+	if d.Quote == "" {
+		d.Quote = `"`
+	}
+	r, err := csvio.NewReader(bytes.NewReader(data), csvio.ReaderOptions{Dialect: d, Encoding: encoding})
+	if err != nil {
+		return nil
+	}
+	var rows [][]string
+	for {
+		rec, err := r.Read()
+		if err != nil {
+			return rows
+		}
+		rows = append(rows, rec.Fields)
+	}
+}
+
+func parseEvents(r io.Reader) []Event {
+	var events []Event
+	sc := bufio.NewScanner(r)
+	sc.Buffer(nil, 1<<20)
+	for sc.Scan() {
+		var e Event
+		if json.Unmarshal(sc.Bytes(), &e) == nil {
+			events = append(events, e)
+		}
+	}
+	return events
+}
+
+// Loaded is a mapping file opened in Studio.
+type Loaded struct {
+	Mapping *config.Mapping `json:"mapping"`
+	// TargetPath is the target file the mapping refers to (absolute), ""
+	// for an inline target.
+	TargetPath string `json:"target_path,omitempty"`
+}
+
+// LoadMapping reads a mapping file. Its target is loaded inline; the file
+// it came from, if any, is returned so that saving can update it.
+func LoadMapping(path string) (*Loaded, error) {
+	m, err := config.LoadMapping(path)
+	if err != nil {
+		return nil, err
+	}
+	l := &Loaded{Mapping: m}
+	if p := m.Target.Path; p != "" {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(filepath.Dir(path), p)
+		}
+		l.TargetPath = p
+		m.Target.Path = ""
+	}
+	return l, nil
+}
+
+// LoadTarget reads a target file, to use in the mapping being edited.
+func LoadTarget(path string) (*config.Target, error) {
+	return config.LoadTarget(path)
+}
+
+// SaveMapping writes the mapping to path. With a targetPath, the target is
+// written to that file and the mapping refers to it (relative path);
+// otherwise the target is written inline. The mapping must be valid.
+func SaveMapping(m *config.Mapping, path, targetPath string) ([]Issue, error) {
+	plan, issues := compile(m)
+	if plan == nil {
+		return issues, errors.New("the mapping has errors: fix them before saving")
+	}
+	ref := ""
+	if targetPath != "" {
+		data, err := config.FormatTarget(m.Target.Inline)
+		if err != nil {
+			return issues, err
+		}
+		if err := writeFile(targetPath, data); err != nil {
+			return issues, err
+		}
+		ref = targetPath
+		if rel, err := filepath.Rel(filepath.Dir(path), targetPath); err == nil {
+			ref = filepath.ToSlash(rel)
+		}
+	}
+	data, err := config.Format(m, ref)
+	if err != nil {
+		return issues, err
+	}
+	return issues, writeFile(path, data)
+}
+
+// writeFile replaces path atomically, like conversions do.
+func writeFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+// Convert converts a whole file with the mapping, like `lmmtfy convert`.
+func Convert(m *config.Mapping, input, output string) (*Result, error) {
+	plan, issues := compile(m)
+	res := &Result{Issues: issues}
+	if plan == nil {
+		res.Failure = "the mapping has errors"
+		return res, nil
+	}
+	if input == output {
+		return nil, errors.New("the output file is the input file")
+	}
+	rejects := ""
+	if *plan.Mapping.OnError.RejectFile {
+		rejects = app.DefaultRejectsPath(output)
+	}
+	var log bytes.Buffer
+	sum, err := plan.ConvertFile(engine.FileJob{
+		Input:   input,
+		Output:  output,
+		Rejects: rejects,
+		Log:     report.NewLogger(&log, report.LevelWarnings, "json", nil),
+	})
+	res.Summary = sum
+	res.Events = parseEvents(&log)
+	var fe *engine.FileError
+	switch {
+	case errors.As(err, &fe):
+		res.Failure = fe.Error()
+	case err != nil:
+		return nil, err
+	}
+	if rejects != "" && sum != nil && sum.RowsRejected > 0 && err == nil {
+		res.Rejects = rejects
+	}
+	return res, nil
+}
+
+// Platform is a platform converters can be exported for.
+type Platform struct {
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	Label     string `json:"label"`
+	Available bool   `json:"available"` // its template is embedded in this Studio
+}
+
+// Platforms lists the platforms converters can be exported for.
+func Platforms() []Platform {
+	labels := map[string]string{
+		"windows/amd64": "Windows (64-bit)",
+		"linux/amd64":   "Linux (x86-64)",
+		"linux/arm64":   "Linux (ARM64)",
+		"darwin/arm64":  "macOS (Apple Silicon)",
+		"darwin/amd64":  "macOS (Intel)",
+	}
+	available := runners.Available()
+	var out []Platform
+	for _, t := range runners.Supported {
+		out = append(out, Platform{OS: t.OS, Arch: t.Arch, Label: labels[t.String()], Available: slices.Contains(available, t)})
+	}
+	return out
+}
+
+// Export builds a standalone converter, like `lmmtfy build`, and returns
+// the file written (".exe" added for Windows).
+func Export(m *config.Mapping, goos, arch, output string) (string, error) {
+	plan, _ := compile(m)
+	if plan == nil {
+		return "", errors.New("the mapping has errors: fix them before exporting")
+	}
+	target := runners.Target{OS: goos, Arch: arch}
+	template, err := runners.Get(target)
+	if err != nil {
+		return "", err
+	}
+	data, err := build.Converter(template, plan, target, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if goos == "windows" && !strings.EqualFold(filepath.Ext(output), ".exe") {
+		output += ".exe"
+	}
+	if err := os.WriteFile(output, data, 0o755); err != nil {
+		return "", err
+	}
+	return output, nil
+}
+
+// ConverterName proposes a converter file name for a mapping and platform.
+func ConverterName(m *config.Mapping, goos, arch string) string {
+	name := detect.TargetName(m.Name, 1) + "-converter"
+	name = strings.ReplaceAll(name, "_", "-")
+	if goos == "windows" {
+		return name + ".exe"
+	}
+	return fmt.Sprintf("%s-%s-%s", name, goos, arch)
+}

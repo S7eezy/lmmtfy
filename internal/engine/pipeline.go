@@ -82,10 +82,16 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 		if first != nil {
 			pending = append(pending, *first)
 		}
+		read := len(pending)
+		limit := r.job.MaxRows
 		for {
 			b := &batch{recs: pending, done: make(chan struct{})}
 			pending = nil
 			for len(b.recs) < batchSize {
+				if limit > 0 && read >= limit {
+					break
+				}
+				read++
 				rec, err := readRecord(reader)
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
@@ -95,7 +101,7 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 				}
 				b.recs = append(b.recs, rec)
 			}
-			last := len(b.recs) < batchSize
+			last := len(b.recs) < batchSize || limit > 0 && read >= limit
 			select {
 			case ordered <- b:
 			case <-stop:

@@ -6,7 +6,9 @@ See [DESIGN.md](DESIGN.md) for the full design.
 
 ## Status
 
-M3: conversion, validation, format detection and standalone converters work. Next: the Studio editor.
+M4: the engine, the CLI, standalone converters and the Studio desktop editor work. Next: packaging and hardening (M5).
+
+**lmmtfy Studio** opens a CSV file, detects how to read it, and lets you rename, retype, reorder, delete and add columns, set defaults, optional columns, value maps and error handling, with a live preview of the output. It saves the mapping, converts files and exports standalone converters.
 
 ```bash
 lmmtfy inspect input.csv                                   # what is this file?
@@ -31,3 +33,11 @@ make help     # all targets
 ```
 
 `make build` cross-compiles the converter templates first, then embeds them into the CLI. A plain `go build ./cmd/lmmtfy` also works, but produces a CLI with no embedded templates.
+
+Studio additionally needs Node.js (and the Xcode command line tools on macOS, WebKitGTK on Linux):
+
+```bash
+make studio           # studio/build/bin/, for this machine
+make studio-windows   # studio/build/bin/lmmtfy-studio.exe, cross-compiled
+cd studio && go tool wails dev   # live-reloading development window
+```

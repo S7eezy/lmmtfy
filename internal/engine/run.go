@@ -43,6 +43,8 @@ type Job struct {
 	Log     *report.Logger
 	// Workers is the number of goroutines converting rows; 0 = one per CPU.
 	Workers int
+	// MaxRows stops after this many data rows (previews); 0 = all.
+	MaxRows int
 }
 
 // Run converts job.Input into job.Output. The summary is always returned,
