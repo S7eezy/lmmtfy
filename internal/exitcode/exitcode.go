@@ -14,4 +14,7 @@ const (
 	FileFailed = 3
 	// IO means a file could not be read or written.
 	IO = 4
+	// Interrupted means the conversion was stopped (Ctrl+C, SIGTERM); no
+	// output was written. 130 is the shell convention for SIGINT.
+	Interrupted = 130
 )

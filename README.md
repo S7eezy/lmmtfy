@@ -2,11 +2,12 @@
 
 Map messy, heterogeneous CSV files onto one fixed format, then apply that mapping from a desktop editor, from the command line, or with a standalone converter binary built from the mapping.
 
-See [DESIGN.md](DESIGN.md) for the full design.
+- **Using it**: [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — Studio, mapping reference, commands, converters, production, troubleshooting.
+- **How it is built**: [DESIGN.md](DESIGN.md).
 
 ## Status
 
-M4: the engine, the CLI, standalone converters and the Studio desktop editor work. Next: packaging and hardening (M5).
+All milestones (M0–M5) are done: the engine, the CLI, format detection, standalone converters, the Studio desktop editor and portable release archives.
 
 **lmmtfy Studio** opens a CSV file, detects how to read it, and lets you rename, retype, reorder, delete and add columns, set defaults, optional columns, value maps and error handling, with a live preview of the output. It saves the mapping, converts files and exports standalone converters.
 
@@ -37,6 +38,7 @@ make help     # all targets
 Studio additionally needs Node.js (and the Xcode command line tools on macOS, WebKitGTK on Linux):
 
 ```bash
+make dist             # portable release archives in dist/release/
 make studio           # studio/build/bin/, for this machine
 make studio-windows   # studio/build/bin/lmmtfy-studio.exe, cross-compiled
 cd studio && go tool wails dev   # live-reloading development window

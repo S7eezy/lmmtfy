@@ -136,6 +136,9 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 	err := func() error {
 		for b := range ordered {
 			<-b.done
+			if err := r.job.Context.Err(); err != nil {
+				return err
+			}
 			for i := range b.results {
 				res := &b.results[i]
 				if err := r.apply(res, b.out[res.start:res.end]); err != nil {

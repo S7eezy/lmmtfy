@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -16,7 +17,8 @@ type FileJob struct {
 	Output  string
 	Rejects string // "" disables the reject file
 	Log     *report.Logger
-	Workers int // 0 = one per CPU
+	Workers int             // 0 = one per CPU
+	Context context.Context // cancel to stop; output files are then removed
 }
 
 // ConvertFile converts a file. Output and reject files are written to
@@ -41,7 +43,7 @@ func (p *Plan) ConvertFile(j FileJob) (*report.Summary, error) {
 		}
 	}
 
-	job := Job{Input: in, Output: out, Log: j.Log, Workers: j.Workers}
+	job := Job{Input: in, Output: out, Log: j.Log, Workers: j.Workers, Context: j.Context}
 	if j.Rejects != "" {
 		job.Rejects = func() (io.Writer, error) {
 			f, err := createTemp(j.Rejects)

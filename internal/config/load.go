@@ -67,10 +67,18 @@ func LoadTarget(path string) (*Target, error) {
 	return &t, nil
 }
 
-func decode(data []byte, v any) error {
+func decode(data []byte, v any) (err error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return errors.New("file is empty")
 	}
+	// The YAML library panics on some malformed documents (found by
+	// fuzzing, e.g. a tag without value): report them as invalid instead
+	// of crashing.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("invalid YAML document (%v)", r)
+		}
+	}()
 	if err := yaml.UnmarshalWithOptions(data, v, yaml.DisallowUnknownField()); err != nil {
 		// FormatError adds the offending source line with a caret under it.
 		return errors.New(yaml.FormatError(err, false, true))

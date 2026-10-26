@@ -389,6 +389,7 @@ Exit codes:
 | 2 | Usage or configuration error |
 | 3 | File failed (`fail_file`, `max_error_rate`, `max_errors`, missing required column) |
 | 4 | I/O error |
+| 130 | Interrupted (Ctrl+C, SIGTERM): temporary files removed, no output written |
 
 ## 7. Standalone converters
 
@@ -464,21 +465,29 @@ Opening a saved mapping goes straight to step 3; a sample CSV can then be opened
 
 ### Packaging: no admin rights
 
-Studio and the CLI ship as **portable archives**: unzip anywhere (home folder, USB stick) and run. No installer, no registry, no admin.
+`make dist` builds portable archives into `dist/release/` (`tools/release`, in Go so it behaves the same on every OS): unpack anywhere and run. No installer, no registry, no admin.
 
-| OS | Studio | Admin needed? |
-|---|---|---|
-| Windows | Single `lmmtfy-studio.exe`. Uses the Edge WebView2 runtime, preinstalled on Windows 11 and on up-to-date Windows 10. If absent, the archive variant `-webview2` carries a fixed-version runtime in a side folder, used without installation. | No |
-| Linux | Binary needing WebKitGTK, present on standard desktops (GNOME, KDE). An AppImage bundling it is the fallback if needed. | No (unless WebKitGTK is missing and must be installed system-wide) |
-| macOS | `lmmtfy-studio.app`, drag anywhere. | No |
+| Archive | Contents |
+|---|---|
+| `lmmtfy-<version>-<os>-<arch>` (.zip for Windows, .tar.gz otherwise; 5 platforms) | CLI with all converter templates, README.txt, USER_GUIDE.md, the acme example |
+| `lmmtfy-studio-<version>-windows-amd64.zip` | Single `lmmtfy-studio.exe` (cross-compiled from macOS or Linux) |
+| `lmmtfy-studio-<version>-macos.zip` | `lmmtfy Studio.app`, universal (Intel and Apple Silicon), ad-hoc signed; built on macOS |
+| `lmmtfy-studio-<version>-linux-amd64.tar.gz` | Built on Linux (WebKitGTK 4.1) |
+| `SHA256SUMS` | Checksums, to verify copies made to air-gapped machines |
 
-The CLI is a single static binary on every OS. Settings and recent files live in the user's config directory (`os.UserConfigDir()`), never next to the executable or in system paths.
+Archive entries carry a fixed date, so their content alone decides their bytes.
+
+- **WebView2 on Windows**: preinstalled on Windows 11 and up-to-date Windows 10. Where it is missing and cannot be installed, Microsoft's Fixed Version runtime unpacked in a `webview2` folder next to `lmmtfy-studio.exe` is used without installation (Studio checks for the folder at startup). The runtime itself is not bundled: it is Microsoft's download.
+- **Linux**: Studio needs WebKitGTK, present on standard desktops.
+- **Settings**: Studio's recent files live in the user's config directory (`os.UserConfigDir()/lmmtfy/studio.json`), never next to the executable or in system paths.
+- **Icon**: drawn by `tools/appicon` (`go run ./tools/appicon -o studio/build/appicon.png`); Wails derives the macOS and Windows icons from it.
+- Unsigned programs: Windows SmartScreen and macOS Gatekeeper (for browser downloads) ask for confirmation the first time; the user guide explains it. Organizations can sign the files with their own certificates (converters after building them).
 
 ## 9. Testing
 
 - Unit tests per type parser/formatter and per tokenizer feature.
 - **Golden tests**: `testdata/<case>/` holds `input.csv`, `mapping.yaml`, expected `output.csv`, `rejects.csv`, `report.json`. Run through the engine, the CLI and a built runner; all three must produce identical results.
-- Fuzzing of the CSV tokenizer and type parsers (`go test -fuzz`).
+- Fuzzing (`go test -fuzz`) of the CSV reader (no panic, write/read round trip), mapping parsing, detection and the decimal fast path. Inputs that once failed stay in `testdata/fuzz/` as regression tests. Fuzzing found: files shorter than 3 bytes failing to open, a panic inside the YAML library on malformed tags (now recovered and reported as an invalid document).
 - Generated multi-GB benchmark file for throughput and memory checks.
 - CI builds the full matrix of runners on every change.
 

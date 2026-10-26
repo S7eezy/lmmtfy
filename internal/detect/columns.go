@@ -127,7 +127,13 @@ func inferColumn(all []string, opts Options) Column {
 
 	best, bestOK, bestFailing := candidate{priority: 1 << 30}, -1, []string(nil)
 	maxFail := int(float64(len(values)) * (1 - opts.Threshold))
+	probe := spread(values, 64)
 	for _, cand := range candidates(values) {
+		// Most readings fail on most columns: a quick try on a few values
+		// spread over the sample avoids testing them on all of it.
+		if ok, _ := evaluate(cand, probe, len(probe)/10); ok < 0 {
+			continue
+		}
 		ok, failing := evaluate(cand, values, maxFail)
 		if ok > bestOK || ok == bestOK && cand.priority < best.priority {
 			best, bestOK, bestFailing = cand, ok, failing
@@ -191,7 +197,7 @@ func inferColumn(all []string, opts Options) Column {
 // as date DD/MM/YYYY; rejected: 31/02/2026"), so the user can fix the data
 // or choose the type. Only the first values are tried, to stay fast.
 func nearMiss(values []string, opts Options) string {
-	values = values[:min(len(values), 500)]
+	values = spread(values, 100)
 	best, bestOK, bestFailing := candidate{priority: 1 << 30}, -1, []string(nil)
 	for _, cand := range candidates(values) {
 		ok, failing := evaluate(cand, values, len(values)/2)
@@ -320,10 +326,12 @@ func dateCandidates(values []string) []candidate {
 // coverDates handles columns mixing date formats (05/10/2026 and
 // 06-10-2026): it picks up to 3 formats that together accept enough values.
 func coverDates(values []string, maxFail int) (candidate, bool) {
+	probe := spread(values, 64)
 	for _, kind := range []string{"date", "datetime"} {
 		var formats []string
 		for _, c := range dateCandidates(values) {
-			if c.col.Type == kind {
+			// Only formats reading at least one of a few values are worth trying.
+			if c.col.Type == kind && len(unmatched(probe, kind, c.rule.Formats[0])) < len(probe) {
 				formats = append(formats, c.rule.Formats[0])
 			}
 		}
@@ -401,6 +409,19 @@ func maxDecimals(values []string, dec string) int {
 		}
 	}
 	return n
+}
+
+// spread returns at most n values taken at regular intervals, so that a
+// probe sees the whole sample, not just its first rows.
+func spread(values []string, n int) []string {
+	if len(values) <= n {
+		return values
+	}
+	out := make([]string, n)
+	for i := range out {
+		out[i] = values[i*len(values)/n]
+	}
+	return out
 }
 
 func hasDigit(s string) bool { return strings.ContainsAny(s, "0123456789") }

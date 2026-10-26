@@ -19,7 +19,7 @@ DIST      := dist
 HOST_OS   := $(shell $(GO) env GOOS)
 HOST_ARCH := $(shell $(GO) env GOARCH)
 
-.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean studio studio-windows
+.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean studio studio-windows dist
 
 all: check build
 
@@ -74,12 +74,31 @@ smoke: build ## Build a converter for this machine and check it converts like th
 # Studio is a separate Go module (studio/) needing Node.js and, on macOS,
 # Xcode command line tools; the Wails CLI is a Go tool dependency of it.
 STUDIO_FLAGS := -clean -trimpath -ldflags "-s -w -X lmmtfy/internal/version.Version=$(VERSION)"
+ifeq ($(HOST_OS),linux)
+# Current distributions ship WebKitGTK 4.1.
+STUDIO_FLAGS += -tags webkit2_41
+endif
 
 studio: runners ## Build lmmtfy Studio for this machine into studio/build/bin/
 	cd studio && CGO_ENABLED=1 $(GO) tool wails build $(STUDIO_FLAGS)
 
 studio-windows: runners ## Build lmmtfy Studio for Windows (cross-compiled) into studio/build/bin/
 	cd studio && $(GO) tool wails build $(STUDIO_FLAGS) -platform windows/amd64
+
+dist: cross ## Portable release archives into dist/release/ (CLI for every platform, Studio for Windows and this OS)
+	$(MAKE) studio-windows
+	mkdir -p $(DIST)/studio
+	cp studio/build/bin/lmmtfy-studio.exe $(DIST)/studio/
+ifeq ($(HOST_OS),darwin)
+	cd studio && CGO_ENABLED=1 $(GO) tool wails build $(STUDIO_FLAGS) -platform darwin/universal
+	rm -rf "$(DIST)/studio/lmmtfy Studio.app"
+	cp -R "studio/build/bin/lmmtfy Studio.app" $(DIST)/studio/
+endif
+ifeq ($(HOST_OS),linux)
+	$(MAKE) studio
+	cp studio/build/bin/lmmtfy-studio $(DIST)/studio/
+endif
+	$(GO) run ./tools/release -version $(VERSION) -dist $(DIST)
 
 check: fmt-check vet test ## Formatting, vet and tests
 

@@ -2,6 +2,8 @@ package engine
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -111,6 +113,46 @@ columns: { n: { source: n } }
 		res := runCase(t, plan, input.Bytes(), workers)
 		if res.err != `line 2, column n: "bad" is not an integer` || res.summary.RowsRead != 1 {
 			t.Errorf("workers=%d: err = %q, rows read = %d", workers, res.err, res.summary.RowsRead)
+		}
+	}
+}
+
+// A cancelled conversion (Ctrl+C) stops, and leaves no output file.
+func TestCancelLeavesNoOutput(t *testing.T) {
+	defer func(size int) { batchSize = size }(batchSize)
+	batchSize = 8
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "m.yaml"), []byte(`
+version: 1
+name: cancel
+target: { columns: [ { name: n, type: integer } ] }
+columns: { n: { source: n } }
+`), 0o644)
+	m, _ := config.LoadMapping(filepath.Join(dir, "m.yaml"))
+	plan, issues := Compile(m)
+	if plan == nil {
+		t.Fatal(issues)
+	}
+	var input bytes.Buffer
+	input.WriteString("n\n")
+	for i := range 200000 {
+		fmt.Fprintf(&input, "%d\n", i)
+	}
+	in := filepath.Join(dir, "in.csv")
+	os.WriteFile(in, input.Bytes(), 0o644)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out := filepath.Join(dir, "out.csv")
+	_, err := plan.ConvertFile(FileJob{Input: in, Output: out, Context: ctx})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.Name() != "m.yaml" && e.Name() != "in.csv" {
+			t.Errorf("left behind: %s", e.Name())
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -45,6 +46,8 @@ type Job struct {
 	Workers int
 	// MaxRows stops after this many data rows (previews); 0 = all.
 	MaxRows int
+	// Context stops the conversion when cancelled (Ctrl+C); nil = never.
+	Context context.Context
 }
 
 // Run converts job.Input into job.Output. The summary is always returned,
@@ -52,6 +55,9 @@ type Job struct {
 func (p *Plan) Run(job Job) (*report.Summary, error) {
 	if job.Log == nil {
 		job.Log = report.Discard
+	}
+	if job.Context == nil {
+		job.Context = context.Background()
 	}
 	start := time.Now()
 	sum := &report.Summary{
@@ -67,6 +73,9 @@ func (p *Plan) Run(job Job) (*report.Summary, error) {
 	if err != nil {
 		sum.Status = "failed"
 		sum.FailureReason = err.Error()
+		if errors.Is(err, context.Canceled) {
+			sum.FailureReason = "interrupted"
+		}
 	}
 	return sum, err
 }

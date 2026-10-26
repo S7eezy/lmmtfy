@@ -50,6 +50,14 @@ export function ReadRaw(arg1, arg2) {
   return window['go']['main']['App']['ReadRaw'](arg1, arg2);
 }
 
+export function Recent() {
+  return window['go']['main']['App']['Recent']();
+}
+
+export function Remember(arg1, arg2) {
+  return window['go']['main']['App']['Remember'](arg1, arg2);
+}
+
 export function SaveMapping(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveMapping'](arg1, arg2, arg3);
 }

@@ -2,6 +2,7 @@ package studio
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -192,5 +193,31 @@ func TestConvertAndExport(t *testing.T) {
 	path, err := Export(fromEditor(t, l.Mapping), "windows", "amd64", filepath.Join(dir, strings.TrimSuffix(name, ".exe")))
 	if err != nil || filepath.Base(path) != "skip-rows-converter.exe" {
 		t.Errorf("export: %v, %s", err, path)
+	}
+}
+
+func TestRecentFiles(t *testing.T) {
+	dir := t.TempDir()
+	saved := configDir
+	defer func() { configDir = saved }()
+	configDir = func() (string, error) { return filepath.Join(dir, "config"), nil }
+
+	if got := RecentFiles(); len(got) != 0 {
+		t.Fatalf("fresh: %v", got)
+	}
+	files := make([]string, 12)
+	for i := range files {
+		files[i] = filepath.Join(dir, fmt.Sprintf("f%d.csv", i))
+		os.WriteFile(files[i], nil, 0o644)
+		if err := Remember("csv", files[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Remember("mapping", files[3]) // reopened: moves to the top, no duplicate
+	os.Remove(files[11])          // deleted files are not listed
+
+	got := RecentFiles()
+	if len(got) != 9 || got[0].Path != files[3] || got[0].Kind != "mapping" {
+		t.Errorf("recent = %+v", got)
 	}
 }

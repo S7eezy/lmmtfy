@@ -80,3 +80,7 @@ func (a *App) Export(m config.Mapping, goos, arch, dir string) (string, error) {
 }
 
 func (a *App) Version() string { return version.Version }
+
+func (a *App) Recent() []studio.Recent { return studio.RecentFiles() }
+
+func (a *App) Remember(kind, path string) error { return studio.Remember(kind, path) }

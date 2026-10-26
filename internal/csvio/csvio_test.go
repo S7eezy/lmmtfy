@@ -69,6 +69,8 @@ func TestReader(t *testing.T) {
 		{"utf-16 with bom", "\xFF\xFEa\x00,\x00b\x00\n\x00", ReaderOptions{Dialect: comma, Encoding: "utf-16"}, [][]string{{"a", "b"}}},
 		{"utf-16be from bom", "\xFE\xFF\x00a\x00,\x00b\x00\n", ReaderOptions{Dialect: comma, Encoding: "utf-16"}, [][]string{{"a", "b"}}},
 		{"unicode delimiter", "a¦b\n", ReaderOptions{Dialect: Dialect{Delimiter: "¦"}}, [][]string{{"a", "b"}}},
+		{"shorter than a BOM", "1\n", ReaderOptions{Dialect: comma}, [][]string{{"1"}}},
+		{"one byte", "x", ReaderOptions{Dialect: comma}, [][]string{{"x"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -2,6 +2,7 @@
 // Every call takes plain data: Svelte state is snapshotted first, since the
 // bridge serializes arguments as JSON.
 import * as Go from '../../wailsjs/go/main/App'
+import { OnFileDrop } from '../../wailsjs/runtime/runtime'
 
 const plain = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)))
 
@@ -19,3 +20,6 @@ export const convert = (mapping, input, output) => Go.Convert(plain(mapping), in
 export const platforms = () => Go.Platforms()
 export const exportConverter = (mapping, os, arch, dir) => Go.Export(plain(mapping), os, arch, dir)
 export const version = () => Go.Version()
+export const recent = () => Go.Recent()
+export const remember = (kind, path) => Go.Remember(kind, path).catch(() => {})
+export const onFileDrop = (fn) => OnFileDrop((x, y, paths) => fn(paths), false)

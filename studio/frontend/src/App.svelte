@@ -36,7 +36,20 @@
   const errorCount = $derived(issues.filter((i) => i.severity === 'error').length)
   const fileName = (p) => p.split(/[\\/]/).pop()
 
+  let recent = $state([])
+
   api.version().then((v) => (version = v))
+  const loadRecent = () => api.recent().then((r) => (recent = r ?? [])).catch(() => {})
+  loadRecent()
+
+  // Dropping a file on the window opens it: mappings by extension, anything
+  // else as a CSV file.
+  api.onFileDrop((paths) => {
+    const path = paths?.[0]
+    if (!path) return
+    if (/\.ya?ml$/i.test(path)) openMapping(path)
+    else openCSV(path)
+  })
 
   function fail(e) { message = { kind: 'error', text: String(e?.message ?? e) } }
   function info(text) { message = { kind: 'ok', text } }
@@ -76,9 +89,9 @@
     return () => clearTimeout(t)
   })
 
-  async function openCSV() {
+  async function openCSV(path = '') {
     if (!(await leaveOk())) return
-    const path = await api.chooseFile('Open a CSV file', 'csv')
+    path ||= await api.chooseFile('Open a CSV file', 'csv')
     if (!path) return
     try {
       const o = await api.open(path)
@@ -92,6 +105,7 @@
       preview = null
       screen = 'read'
       message = null
+      api.remember('csv', path).then(loadRecent)
     } catch (e) { fail(e) }
   }
 
@@ -103,9 +117,9 @@
     } catch (e) { fail(e) }
   }
 
-  async function openMapping() {
+  async function openMapping(path = '') {
     if (!(await leaveOk())) return
-    const path = await api.chooseFile('Open a mapping', 'mapping')
+    path ||= await api.chooseFile('Open a mapping', 'mapping')
     if (!path) return
     try {
       const l = await api.loadMapping(path)
@@ -119,6 +133,7 @@
       csvPath = ''
       screen = 'edit'
       message = null
+      api.remember('mapping', path).then(loadRecent)
       info(`Opened ${fileName(path)}. Open a sample CSV file to preview the conversion.`)
     } catch (e) { fail(e) }
   }
@@ -141,6 +156,7 @@
       await api.saveMapping(mapping, path, targetPath)
       mappingPath = path
       saved = canonical(mapping)
+      api.remember('mapping', path).then(loadRecent)
       info(`Saved ${fileName(path)}${targetPath ? ` and ${fileName(targetPath)}` : ''}.`)
     } catch (e) { fail(e) }
   }
@@ -193,9 +209,22 @@
         <h1>Let Me Map That For You</h1>
         <p class="muted">Describe once how a messy CSV file becomes the format your software expects. Then convert files here, from the command line, or with a standalone converter.</p>
         <div class="cards">
-          <button class="card" onclick={openCSV}><strong>New mapping from a CSV file</strong><span>Open a file, check how it is read, map its columns.</span></button>
-          <button class="card" onclick={openMapping}><strong>Open a mapping</strong><span>Edit a saved mapping, convert files, export converters.</span></button>
+          <button class="card" onclick={() => openCSV()}><strong>New mapping from a CSV file</strong><span>Open a file, check how it is read, map its columns.</span></button>
+          <button class="card" onclick={() => openMapping()}><strong>Open a mapping</strong><span>Edit a saved mapping, convert files, export converters.</span></button>
         </div>
+        <p class="muted">or drop a CSV or mapping file on this window</p>
+        {#if recent.length}
+          <div class="recent panel">
+            <h3>Recent</h3>
+            {#each recent as r}
+              <button class="link item" title={r.path} onclick={() => (r.kind === 'mapping' ? openMapping(r.path) : openCSV(r.path))}>
+                <span class="badge">{r.kind === 'mapping' ? 'mapping' : 'CSV'}</span>
+                <span class="name">{fileName(r.path)}</span>
+                <span class="muted mono dir">{r.path.slice(0, -fileName(r.path).length)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
         <p class="muted small">Version {version}</p>
       </div>
     {:else if screen === 'read' && mapping}
@@ -241,4 +270,8 @@
   .card strong { font-size: 15px; }
   .card span { color: var(--muted); }
   .small { font-size: 11px; }
+  .recent { text-align: left; padding: 6px 14px 10px; margin: 18px 0; }
+  .item { display: flex; gap: 8px; align-items: center; width: 100%; padding: 5px 2px; color: var(--text); text-align: left; }
+  .item .name { font-weight: 600; }
+  .item .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; flex: 1; text-align: left; }
 </style>

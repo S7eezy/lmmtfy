@@ -114,10 +114,13 @@ func NewReader(src io.Reader, opts ReaderOptions) (*Reader, error) {
 
 // stripBOM removes a leading BOM. For UTF-16 the BOM decides the byte order.
 func stripBOM(br *bufio.Reader, enc *Encoding) error {
+	// Files shorter than a BOM are fine: Peek then reports EOF with what
+	// there is.
 	head, err := br.Peek(3)
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 		return err
 	}
+	err = nil
 	switch {
 	case enc.Enc == nil && bytes.HasPrefix(head, bomUTF8):
 		_, err = br.Discard(3)

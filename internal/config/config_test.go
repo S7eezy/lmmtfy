@@ -232,3 +232,9 @@ columns:
 		t.Errorf("hash changed after round trip\n%s", data)
 	}
 }
+
+func TestMalformedYAMLIsAnErrorNotAPanic(t *testing.T) {
+	if _, err := ParseMapping([]byte("target:\n columns: ! ")); err == nil {
+		t.Error("want an error")
+	}
+}

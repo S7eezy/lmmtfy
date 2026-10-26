@@ -27,6 +27,10 @@ export function Preview(arg1:string,arg2:config.Mapping):Promise<studio.Result>;
 
 export function ReadRaw(arg1:string,arg2:config.Input):Promise<studio.Raw>;
 
+export function Recent():Promise<Array<studio.Recent>>;
+
+export function Remember(arg1:string,arg2:string):Promise<void>;
+
 export function SaveMapping(arg1:config.Mapping,arg2:string,arg3:string):Promise<Array<studio.Issue>>;
 
 export function Version():Promise<string>;

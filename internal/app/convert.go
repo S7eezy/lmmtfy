@@ -3,12 +3,15 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"lmmtfy/internal/config"
@@ -69,8 +72,13 @@ func Convert(req ConvertRequest) int {
 		rejects = DefaultRejectsPath(req.Output)
 	}
 
+	// Ctrl+C or a service stop cancels the conversion: temporary files are
+	// removed and no partial output is left.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	log.Info(report.Event{Message: fmt.Sprintf("converting %s with mapping %s", req.Input, m.Name)})
-	sum, err := req.Plan.ConvertFile(engine.FileJob{Input: req.Input, Output: req.Output, Rejects: rejects, Log: log, Workers: req.Workers})
+	sum, err := req.Plan.ConvertFile(engine.FileJob{Input: req.Input, Output: req.Output, Rejects: rejects, Log: log, Workers: req.Workers, Context: ctx})
 
 	if sum != nil {
 		if *m.Logging.Summary {
@@ -88,6 +96,8 @@ func Convert(req ConvertRequest) int {
 
 	var fe *engine.FileError
 	switch {
+	case errors.Is(err, context.Canceled):
+		return fail(exitcode.Interrupted, "interrupted: no output written")
 	case errors.As(err, &fe):
 		return fail(exitcode.FileFailed, "conversion failed: %v", fe)
 	case err != nil:
