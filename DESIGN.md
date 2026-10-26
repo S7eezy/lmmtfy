@@ -331,7 +331,21 @@ Failure at any step → the column's error strategy.
 - Text after a closing quote, before the next delimiter, is kept as part of the field (`"ab"c` reads as `abc`). Real-world files do this.
 - Custom CSV tokenizer: Go's `encoding/csv` only supports `"` as quote and no escape character. Benchmarked against `encoding/csv` for the default dialect.
 - Output written to a temp file next to the destination, then renamed on success. A failed conversion never leaves a partial output.
-- Target: 1 GB in well under a minute on a laptop, memory under 100 MB. Measured at M1 (Apple M-series laptop): 956 MB / 20.6 M rows in 18 s, 14 MB peak memory. The CSV reader alone runs at about 440 MB/s.
+- Rows are converted in parallel, results applied in input order (see below).
+- Decimals use int64 arithmetic up to 18 significant digits and arbitrary precision beyond, or when min/max are set. Differential and fuzz tests check that both paths always agree.
+- Target: 1 GB in well under a minute on a laptop, memory under 100 MB. Measured on a 10-core Apple laptop, 956 MB / 20.6 M rows: 7.3 s and 41 MB peak memory with all cores, 12 s and 16 MB with `--workers 1` (18 s before parallelism and the decimal fast path).
+
+### Parallelism
+
+```
+reader ──batches of 1024 rows──▶ workers (one per core) ──▶ apply, in input order ──▶ writer
+   └────────────── same batches, in input order ──────────────┘
+```
+
+- Workers convert and format rows; they only read the plan and write to their batch.
+- One "apply" stage takes batches back in input order and does everything with shared state: counters, logs, error strategies, thresholds, reject file, output. Output, reject file, logs and summary are therefore identical whatever the number of workers; tests check this on every golden case with batches of 1 to 3 rows and 1 to 8 workers, under the race detector.
+- At most 4 batches per worker are in flight, so memory stays bounded.
+- `--workers N` limits the cores used (default: all). Reading and applying are single-threaded and set the ceiling.
 
 ### Detection (Studio and `lmmtfy inspect`)
 
@@ -345,7 +359,7 @@ Detection only proposes; the user decides.
 ## 6. CLI
 
 ```
-lmmtfy convert <input.csv> --mapping <m.yaml> -o <out.csv> [--rejects path] [--report r.json] [--log-level L] [--strict]
+lmmtfy convert <input.csv> --mapping <m.yaml> -o <out.csv> [--rejects path] [--report r.json] [--log-level L] [--strict] [--workers N]
 lmmtfy validate --mapping <m.yaml> [--input <input.csv>]     # check config; optionally check an input header against it
 lmmtfy inspect <input.csv> [--sample N]                      # detected dialect, columns, types
 lmmtfy init <input.csv> -o <m.yaml>                          # draft mapping from detection (standalone)

@@ -67,6 +67,7 @@ func cmdConvert(args []string, stderr io.Writer, now func() time.Time) int {
 	reportPath := fs.String("report", "", "write a JSON summary to this file")
 	logLevel := fs.String("log-level", "", "override the mapping's log level: none, errors, warnings, info, trace")
 	strict := fs.Bool("strict", false, "exit with code 1 when any row had an error, even if handled")
+	workers := fs.Int("workers", 0, "rows are converted on this many CPU cores (default: all)")
 
 	pos, code := parse(fs, args)
 	if code >= 0 {
@@ -91,6 +92,7 @@ func cmdConvert(args []string, stderr io.Writer, now func() time.Time) int {
 		Report:   *reportPath,
 		LogLevel: *logLevel,
 		Strict:   *strict,
+		Workers:  *workers,
 		Stderr:   stderr,
 		Now:      now,
 	})

@@ -12,7 +12,6 @@ import (
 
 	"lmmtfy/internal/csvio"
 	"lmmtfy/internal/report"
-	"lmmtfy/internal/types"
 	"lmmtfy/internal/version"
 )
 
@@ -42,6 +41,8 @@ type Job struct {
 	// only, so no reject file exists when nothing is rejected. Nil disables it.
 	Rejects func() (io.Writer, error)
 	Log     *report.Logger
+	// Workers is the number of goroutines converting rows; 0 = one per CPU.
+	Workers int
 }
 
 // Run converts job.Input into job.Output. The summary is always returned,
@@ -84,7 +85,7 @@ type run struct {
 	rawHeader []string
 	width     int
 	cols      []*active
-	out       []string
+	wopts     csvio.WriterOptions // with Numeric set for the active columns
 	writer    *csvio.Writer
 	rejects   *csvio.Writer
 	stats     map[string]*report.ColumnStats
@@ -140,24 +141,9 @@ func (r *run) run() error {
 		}
 	}
 
-	r.out = make([]string, len(r.cols))
 	r.stats = map[string]*report.ColumnStats{}
-	if first != nil {
-		if err := r.row(*first); err != nil {
-			return err
-		}
-	}
-	for {
-		rec, err := readRecord(reader)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if err := r.row(rec); err != nil {
-			return err
-		}
+	if err := r.pipeline(reader, first); err != nil {
+		return err
 	}
 
 	if err := r.checkErrorRate(); err != nil {
@@ -251,7 +237,7 @@ func (r *run) openWriter() error {
 	if err != nil {
 		return err
 	}
-	r.writer = w
+	r.writer, r.wopts = w, opts
 	if r.plan.outHeader {
 		if err := w.Write(names); err != nil {
 			return &FileError{Reason: "cannot write output header: " + err.Error()}
@@ -265,73 +251,54 @@ type cellError struct {
 	msg    string
 }
 
-func (r *run) row(rec csvio.Record) error {
-	p := r.plan
+// apply handles one computed row, in input order: statistics, logs, error
+// strategies, reject file, output. It is the only stage touching shared
+// state, so its effects are the same whatever the number of workers.
+func (r *run) apply(res *rowResult, formatted []byte) error {
+	rec := res.rec
 	r.sum.RowsRead++
 	log := r.job.Log
 	if log.Enabled(report.LevelTrace) {
 		log.Trace(report.Event{Line: rec.Line, Message: fmt.Sprintf("%q", rec.Fields)})
 	}
-
-	fields := rec.Fields
-	if n := len(fields); n != r.width {
-		switch {
-		case n < r.width && (p.ragged == "pad" || p.ragged == "lenient"):
-			fields = append(slices.Clone(fields), make([]string, r.width-n)...)
-		case n > r.width && (p.ragged == "truncate" || p.ragged == "lenient"):
-		default:
-			return r.rowError(rec, []cellError{{"", fmt.Sprintf("row has %d fields, expected %d", n, r.width)}})
-		}
+	if res.rowErr != nil {
+		return r.rowError(rec, []cellError{*res.rowErr})
 	}
 
 	var errs []cellError
-	defaulted := false
-	for i, c := range r.cols {
-		v, err := c.value(fields, p)
-		if err == nil {
-			r.out[i] = v
-			continue
-		}
-		var warn *types.Warning
-		if errors.As(err, &warn) {
-			r.out[i] = v
+	for _, e := range res.events {
+		c := r.cols[e.col]
+		switch e.kind {
+		case eventWarning:
 			r.stat(c.name).Warnings++
-			log.Warn(report.Event{Line: rec.Line, Column: c.name, Message: warn.Msg})
-			continue
-		}
-
-		r.stat(c.name).Errors++
-		switch c.onError {
-		case "fail_file":
+			log.Warn(report.Event{Line: rec.Line, Column: c.name, Message: e.msg})
+		case eventFail:
 			// Not logged as an event: the failure reason is in the summary.
+			r.stat(c.name).Errors++
 			r.sum.RowsWithErrors++
-			return &FileError{Line: rec.Line, Column: c.name, Reason: err.Error()}
-		case "default":
-			r.out[i] = c.fallback(p)
-			r.stat(c.name).Defaulted++
-			defaulted = true
-			log.Error(report.Event{Line: rec.Line, Column: c.name, Message: err.Error() + " (default used)"})
-		default: // skip_row: logged when the row is rejected
-			errs = append(errs, cellError{c.name, err.Error()})
+			return &FileError{Line: rec.Line, Column: c.name, Reason: e.msg}
+		case eventDefaulted:
+			s := r.stat(c.name)
+			s.Errors++
+			s.Defaulted++
+			log.Error(report.Event{Line: rec.Line, Column: c.name, Message: e.msg + " (default used)"})
+		case eventReject: // logged when the row is rejected
+			r.stat(c.name).Errors++
+			errs = append(errs, cellError{c.name, e.msg})
 		}
 	}
 	if len(errs) > 0 {
 		return r.reject(rec, errs)
 	}
+	if res.writeErr != nil {
+		return r.rowError(rec, []cellError{*res.writeErr})
+	}
 
-	if err := r.writer.Write(r.out); err != nil {
-		var re *csvio.RowError
-		if !errors.As(err, &re) {
-			return err
-		}
-		column := ""
-		if re.Field >= 0 {
-			column = r.cols[re.Field].name
-		}
-		return r.rowError(rec, []cellError{{column, re.Msg}})
+	if err := r.writer.WriteFormatted(formatted); err != nil {
+		return err
 	}
 	r.sum.RowsWritten++
-	if defaulted {
+	if res.defaulted {
 		r.sum.RowsWithErrors++
 		return r.checkMaxErrors()
 	}

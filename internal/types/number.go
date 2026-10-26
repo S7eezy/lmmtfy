@@ -147,11 +147,125 @@ func (c *decConv) Convert(raw string) (string, error) {
 	if !isDecimal(s) {
 		return "", fmt.Errorf("%q is not a decimal number", shorten(raw))
 	}
+
+	out, ok := c.fast(s)
+	if !ok {
+		var err error
+		if out, err = c.exact(s, raw); err != nil {
+			return "", err
+		}
+	}
+	intPart, frac, hasFrac := strings.Cut(out, ".")
+	out = group(intPart, c.outSep)
+	if hasFrac {
+		out += c.outDec + frac
+	}
+	return out, nil
+}
+
+// pow10[i] is 10^i, up to the largest power of ten fitting in an int64.
+var pow10 = func() (p [19]int64) {
+	p[0] = 1
+	for i := 1; i < len(p); i++ {
+		p[i] = p[i-1] * 10
+	}
+	return p
+}()
+
+// fast rounds and formats s (a valid decimal, "." separator) with int64
+// arithmetic, which covers almost every real value: up to 18 significant
+// digits. It returns false when s does not fit or min/max must be checked;
+// the caller then uses exact. Both give the same result: see the
+// differential tests.
+func (c *decConv) fast(s string) (string, bool) {
+	if c.min != nil || c.max != nil {
+		return "", false
+	}
+	neg := false
+	switch s[0] {
+	case '-':
+		neg, s = true, s[1:]
+	case '+':
+		s = s[1:]
+	}
+	intPart, frac, _ := strings.Cut(s, ".")
+	intPart = strings.TrimLeft(intPart, "0")
+	digits := len(intPart) + len(frac)
+	if digits > 18 {
+		return "", false
+	}
+
+	// m is the value without its decimal point: 12.345 → 12345, scale 3.
+	var m int64
+	for i := 0; i < len(intPart); i++ {
+		m = m*10 + int64(intPart[i]-'0')
+	}
+	for i := 0; i < len(frac); i++ {
+		m = m*10 + int64(frac[i]-'0')
+	}
+	scale := len(frac)
+
+	if c.hasScale {
+		k := int(c.scale)
+		switch {
+		case scale < k:
+			if digits+k-scale > 18 {
+				return "", false
+			}
+			m *= pow10[k-scale]
+		case scale > k:
+			// Rounding works on the magnitude; the sign is put back below,
+			// which gives half away from zero and symmetric half-even.
+			p := pow10[scale-k]
+			q, rem := m/p, m%p
+			switch c.rounding {
+			case "half_up":
+				if rem*2 >= p {
+					q++
+				}
+			case "half_even":
+				if rem*2 > p || rem*2 == p && q%2 == 1 {
+					q++
+				}
+			}
+			m = q
+		}
+		scale = k
+	} else {
+		// Without a target scale the value is written as is, minus
+		// trailing zeros: 1.50 → 1.5, 10.0 → 10.
+		for scale > 0 && m%10 == 0 {
+			m /= 10
+			scale--
+		}
+	}
+
+	b := make([]byte, 0, 24)
+	if neg && m != 0 {
+		b = append(b, '-')
+	}
+	str := strconv.FormatInt(m, 10)
+	if scale == 0 {
+		return string(append(b, str...)), true
+	}
+	if len(str) <= scale { // 0.05 → "5" needs leading zeros
+		b = append(b, "0."...)
+		for range scale - len(str) {
+			b = append(b, '0')
+		}
+		return string(append(b, str...)), true
+	}
+	b = append(b, str[:len(str)-scale]...)
+	b = append(b, '.')
+	return string(append(b, str[len(str)-scale:]...)), true
+}
+
+// exact rounds, checks and formats s with arbitrary precision.
+func (c *decConv) exact(s, raw string) (string, error) {
 	d, err := decimal.NewFromString(s)
 	if err != nil {
 		return "", fmt.Errorf("%q is not a decimal number", shorten(raw))
 	}
-
 	if c.hasScale {
 		switch c.rounding {
 		case "half_up":
@@ -168,17 +282,10 @@ func (c *decConv) Convert(raw string) (string, error) {
 	if c.max != nil && d.GreaterThan(*c.max) {
 		return "", fmt.Errorf("%s is more than the maximum %s", d, c.max)
 	}
-
-	out := d.String()
 	if c.hasScale {
-		out = d.StringFixed(c.scale)
+		return d.StringFixed(c.scale), nil
 	}
-	intPart, frac, hasFrac := strings.Cut(out, ".")
-	out = group(intPart, c.outSep)
-	if hasFrac {
-		out += c.outDec + frac
-	}
-	return out, nil
+	return d.String(), nil
 }
 
 // isDecimal reports whether s is [+-]digits[.digits], with at least one digit.

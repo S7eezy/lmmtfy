@@ -27,6 +27,7 @@ type ConvertRequest struct {
 	Report   string // "" = no JSON report
 	LogLevel string // "" = mapping's logging.level
 	Strict   bool
+	Workers  int // 0 = one per CPU
 	Stderr   io.Writer
 	Now      func() time.Time // log timestamps; nil = none
 }
@@ -69,7 +70,7 @@ func Convert(req ConvertRequest) int {
 	}
 
 	log.Info(report.Event{Message: fmt.Sprintf("converting %s with mapping %s", req.Input, m.Name)})
-	sum, err := req.Plan.ConvertFile(engine.FileJob{Input: req.Input, Output: req.Output, Rejects: rejects, Log: log})
+	sum, err := req.Plan.ConvertFile(engine.FileJob{Input: req.Input, Output: req.Output, Rejects: rejects, Log: log, Workers: req.Workers})
 
 	if sum != nil {
 		if *m.Logging.Summary {
