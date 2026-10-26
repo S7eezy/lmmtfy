@@ -249,3 +249,16 @@ func TestTargetName(t *testing.T) {
 		}
 	}
 }
+
+func TestScientificNotation(t *testing.T) {
+	c := column(t, detectString(t, "id;pw_std\n1;0.000123\n2;5.419198916047157e-07\n3;1.5E+3\n4;12.5\n"), "pw_std")
+	if c.Type != "decimal" || c.Confidence != 1 {
+		t.Fatalf("type %s, confidence %.2f, failing %q", c.Type, c.Confidence, c.Failing)
+	}
+	if c.Scale != nil {
+		t.Errorf("scale = %d, want none (exponents vary)", *c.Scale)
+	}
+	if msg := expectNote(c, "scientific notation (5.419198916047157e-07, 1.5E+3)"); msg != "" {
+		t.Error(msg)
+	}
+}

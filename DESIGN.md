@@ -226,7 +226,7 @@ A standalone mapping replaces `target: ./file` with an inline object holding `ou
 |---|---|---|
 | `string` | `max_length`, `on_overflow`, `case` (none/upper/lower), `pattern` (regex), `allowed_values` | `trim` |
 | `integer` | `min`, `max`, `thousands_sep` | `thousands_sep` |
-| `decimal` | `scale`, `rounding` (half_up/half_even/truncate), `decimal_sep`, `thousands_sep`, `min`, `max` | `decimal_sep`, `thousands_sep` |
+| `decimal` | `scale`, `rounding` (half_up/half_even/truncate), `decimal_sep`, `thousands_sep`, `min`, `max` | `decimal_sep`, `thousands_sep`; scientific notation (`5.4e-07`, exponent up to ±308) is accepted, output is always plain notation |
 | `boolean` | `true_value`, `false_value` (e.g. `1`/`0`) | `true_values`, `false_values` (lists, case-insensitive) |
 | `date` | `format` | `formats` (list, tried in order) |
 | `datetime` | `format`, `timezone` | `formats`, `timezone` (assumed for naive values) |
@@ -361,6 +361,7 @@ Detection reads the first 4 MiB of the file (at most 10,000 data rows) and, for 
   - Thousands separators must be consistent (`1 234 567`): `12.34.5` is not an integer.
   - Numbers with leading zeros (`007`) stay text: they are codes.
   - Common null tokens (`NULL`, `N/A`, `-`…) in an otherwise typed column become `null_tokens`.
+  - Decimal columns with scientific notation get no scale (the number of decimals varies with the exponent, a fixed scale would round tiny values to zero), and a note.
   - Several date formats in one column are covered with up to 3 formats.
 - **Notes** flag what a human should check: ambiguous day/month order, `.`/`,` read as thousands separators, 8-digit integers that are also valid dates, text columns that almost parse ("80% of values read as date DD/MM/YYYY; rejected: 31/02/2026").
 - Target names are derived from headers: lower-case ASCII, accents removed, underscores (`N° Commande` → `n_commande`); `column_N` without header.

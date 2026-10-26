@@ -174,11 +174,12 @@ var pow10 = func() (p [19]int64) {
 
 // fast rounds and formats s (a valid decimal, "." separator) with int64
 // arithmetic, which covers almost every real value: up to 18 significant
-// digits. It returns false when s does not fit or min/max must be checked;
-// the caller then uses exact. Both give the same result: see the
+// digits. It returns false when s does not fit, uses scientific notation or
+// min/max must be checked; the caller then uses exact. Output is always in
+// plain notation (5.4e-07 → 0.00000054). Both give the same result: see the
 // differential tests.
 func (c *decConv) fast(s string) (string, bool) {
-	if c.min != nil || c.max != nil {
+	if c.min != nil || c.max != nil || strings.ContainsAny(s, "eE") {
 		return "", false
 	}
 	neg := false
@@ -288,15 +289,26 @@ func (c *decConv) exact(s, raw string) (string, error) {
 	return d.String(), nil
 }
 
-// isDecimal reports whether s is [+-]digits[.digits], with at least one digit.
-// No exponent, no spaces: inputs are explicit about their format.
+// maxExponent bounds scientific notation to the range of a double
+// (1.8e308): every real export fits, and "1e999999999" cannot make the
+// output a billion digits long.
+const maxExponent = 308
+
+// isDecimal reports whether s is [+-]digits[.digits][e[+-]digits], with at
+// least one mantissa digit. Scientific notation (5.4e-07) is what Python,
+// Excel and lab tools write for very small or large numbers. No spaces:
+// inputs are explicit about their format.
 func isDecimal(s string) bool {
-	if s != "" && (s[0] == '+' || s[0] == '-') {
-		s = s[1:]
+	mantissa, exp, hasExp := strings.Cut(strings.ToLower(s), "e")
+	if hasExp && !validExponent(exp) {
+		return false
+	}
+	if mantissa != "" && (mantissa[0] == '+' || mantissa[0] == '-') {
+		mantissa = mantissa[1:]
 	}
 	digits, dot := 0, false
-	for i := 0; i < len(s); i++ {
-		switch c := s[i]; {
+	for i := 0; i < len(mantissa); i++ {
+		switch c := mantissa[i]; {
 		case c >= '0' && c <= '9':
 			digits++
 		case c == '.' && !dot:
@@ -306,6 +318,14 @@ func isDecimal(s string) bool {
 		}
 	}
 	return digits > 0
+}
+
+func validExponent(exp string) bool {
+	if exp != "" && (exp[0] == '+' || exp[0] == '-') {
+		exp = exp[1:]
+	}
+	n, err := strconv.Atoi(exp)
+	return err == nil && exp != "" && n <= maxExponent && !strings.ContainsAny(exp, "+-")
 }
 
 // group inserts sep every three digits of an integer string ("-1234567" →

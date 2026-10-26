@@ -1,0 +1,17 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ";"
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       6 rows (whole file)
+
+  #  column       target       type     ok    details      examples
+  1  sample       sample       string   100%  max 2 chars  "A1", "A2", "A3"
+  2  pw_std_us_1  pw_std_us_1  decimal  100%  decimal "."  "0.000123", "0.0004", "1.2e-05"
+  3  ratio        ratio        decimal  100%  decimal "."  "1.5", "2", "3.25"
+
+notes:
+  - pw_std_us_1: scientific notation (1.2e-05, 5.419198916047157e-07): written as plain decimals with all their digits; set a scale to round them
+  - ratio: scientific notation (1E+2): written as plain decimals with all their digits; set a scale to round them

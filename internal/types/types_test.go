@@ -95,8 +95,22 @@ func TestDecimal(t *testing.T) {
 		{"12", "12.00", ""},
 		{"1.5", "", "decimal separator is"},
 		{"1,2,3", "", "not a decimal"},
-		{"1e5", "", "not a decimal"},
+		{"1e5", "100000.00", ""},
+		{"5,4e-03", "0.01", ""}, // decimal comma with exponent: 0.0054
 		{"", "", "not a decimal"},
+	})
+	// Scientific notation, as written by Python, Excel or lab instruments.
+	runCases(t, config.TargetColumn{Type: "decimal"}, &config.Rule{}, []convCase{
+		{"5.419198916047157e-07", "0.0000005419198916047157", ""},
+		{"1.5E+3", "1500", ""},
+		{"-2.5e2", "-250", ""},
+		{"1e308", "1" + strings.Repeat("0", 308), ""},
+		{"1e309", "", "not a decimal"},   // beyond a double
+		{"1e", "", "not a decimal"},      // no exponent digits
+		{"e5", "", "not a decimal"},      // no mantissa
+		{"1e5.5", "", "not a decimal"},   // fractional exponent
+		{"1e+-5", "", "not a decimal"},   // two signs
+		{"1.2.3e4", "", "not a decimal"}, // two dots
 	})
 	runCases(t, config.TargetColumn{Type: "decimal", Scale: n(2), Rounding: "half_even"}, &config.Rule{}, []convCase{
 		{"2.345", "2.34", ""},

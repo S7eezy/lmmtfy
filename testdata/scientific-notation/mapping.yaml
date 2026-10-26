@@ -1,0 +1,15 @@
+version: 1
+name: scientific
+target:
+  output: { line_ending: lf }
+  columns:
+    - { name: sample, type: string }
+    - { name: pw_std_us_1, type: decimal }           # no scale: all digits kept
+    - { name: pw_std_us_1_rounded, type: decimal, scale: 6 }
+    - { name: ratio, type: decimal, scale: 2 }
+input: { delimiter: ";" }
+columns:
+  sample:              { source: sample }
+  pw_std_us_1:         { source: pw_std_us_1 }
+  pw_std_us_1_rounded: { source: pw_std_us_1 }
+  ratio:               { source: ratio }

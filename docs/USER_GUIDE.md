@@ -122,7 +122,7 @@ A mapping refers to a target file with a path relative to the mapping file, or h
 |---|---|
 | `string` | `case` (`upper`, `lower`), `max_length`, `on_overflow` (**`error`**, `truncate`), `pattern` (regular expression matching the whole value), `allowed_values` |
 | `integer` | `min`, `max`, `thousands_sep` |
-| `decimal` | `scale` (decimals written), `rounding` (**`half_up`**, `half_even`, `truncate`), `decimal_sep` (**`.`**), `thousands_sep`, `min`, `max` |
+| `decimal` | `scale` (decimals written; none: as many as the value has), `rounding` (**`half_up`**, `half_even`, `truncate`), `decimal_sep` (**`.`**), `thousands_sep`, `min`, `max`. Source values may use scientific notation (`5.4e-07`, `1E+3`); output is always plain notation (`0.00000054`). |
 | `boolean` | `true_value` (**`true`**), `false_value` (**`false`**) |
 | `date`, `datetime`, `time` | `format` (**`YYYY-MM-DD`**, **`YYYY-MM-DDTHH:mm:ss`**, **`HH:mm:ss`**), `timezone` (datetime only, **UTC**) |
 
@@ -293,7 +293,8 @@ A converter cannot be pointed at another mapping: it converts with the one it wa
 | `duplicate header "Name"` | Set `input.duplicate_headers: suffix` and use `Name_2` for the second one. |
 | `row has 4 fields, expected 5` | Rows with missing or extra fields: fix the file, or set `input.ragged_rows`. |
 | `"31/02/2026" does not match date format DD/MM/YYYY` | The value is invalid (there is no 31 February) or another format is used: add it to `formats`. |
-| Decimal values rejected | Set `decimal_sep` and `thousands_sep` on the rule to the source's separators. |
+| Decimal values rejected | Set `decimal_sep` and `thousands_sep` on the rule to the source's separators. Scientific notation (`5.4e-07`) is accepted. |
+| Tiny values become `0.00` | The column has a `scale` too small for them (often with scientific notation). Remove the scale to keep all digits, or raise it. |
 | The total line at the end is rejected | Set `input.skip_footer`. |
 | Windows: "Windows protected your PC" | SmartScreen warns about unsigned programs: "More info", then "Run anyway". Or sign the files with your organization's certificate (sign converters after building them). |
 | macOS: "cannot verify the developer" | Files downloaded with a browser are quarantined: right-click, Open, then Open. Copies from a network share or USB stick are not affected. |

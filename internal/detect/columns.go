@@ -183,8 +183,15 @@ func inferColumn(all []string, opts Options) Column {
 		}
 	}
 	if c.Type == "decimal" {
-		scale := maxDecimals(values, c.DecimalSep)
-		c.Scale = &scale
+		if sci := scientific(values); len(sci) > 0 {
+			// The number of decimals varies with the exponent: a fixed scale
+			// would round tiny values to zero. Without scale, values are
+			// written in plain notation with all their digits.
+			c.Notes = append(c.Notes, fmt.Sprintf("scientific notation (%s): written as plain decimals with all their digits; set a scale to round them", strings.Join(distinct(sci, 2), ", ")))
+		} else {
+			scale := maxDecimals(values, c.DecimalSep)
+			c.Scale = &scale
+		}
 	}
 	if c.Type == "integer" && c.ThousandsSep == "" && matchesAll(values, "date", "YYYYMMDD") {
 		c.Notes = append(c.Notes, "values also read as dates (YYYYMMDD): change the type if they are dates")
@@ -396,6 +403,17 @@ var leadingZero = regexp.MustCompile(`^[+-]?0\d+([.,]\d*)?$`)
 
 func leadingZeros(values []string) bool {
 	return slices.ContainsFunc(values, leadingZero.MatchString)
+}
+
+// scientific returns the values written with an exponent (5.4e-07).
+func scientific(values []string) []string {
+	var out []string
+	for _, v := range values {
+		if strings.ContainsAny(v, "eE") {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func maxDecimals(values []string, dec string) int {
