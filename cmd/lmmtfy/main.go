@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lmmtfy/internal/app"
+	"lmmtfy/internal/detect"
 	"lmmtfy/internal/exitcode"
 	"lmmtfy/internal/runners"
 	"lmmtfy/internal/version"
@@ -24,6 +25,8 @@ Usage:
 Commands:
   convert   convert a CSV file with a mapping
   validate  check a mapping, and optionally an input file against it
+  inspect   detect the format and column types of a CSV file
+  init      write a draft mapping for a CSV file
   version   print version and embedded converter platforms
   help      show this help
 
@@ -46,6 +49,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdConvert(args[1:], stderr, time.Now)
 	case "validate":
 		return cmdValidate(args[1:], stdout, stderr)
+	case "inspect":
+		return cmdInspect(args[1:], stdout, stderr)
+	case "init":
+		return cmdInit(args[1:], stdout, stderr)
 	case "version":
 		return cmdVersion(stdout)
 	case "help", "-h", "--help":
@@ -113,6 +120,53 @@ func cmdValidate(args []string, stdout, stderr io.Writer) int {
 		return exitcode.Usage
 	}
 	return app.Validate("lmmtfy", *mapping, *input, stdout, stderr)
+}
+
+func cmdInspect(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("inspect", "<input.csv> [--sample N] [--json]", stderr)
+	sample := fs.Int("sample", 10000, "number of rows analysed")
+	asJSON := fs.Bool("json", false, "print the result as JSON")
+
+	pos, code := parse(fs, args)
+	if code >= 0 {
+		return code
+	}
+	if len(pos) != 1 {
+		fmt.Fprintln(stderr, "lmmtfy inspect: need one input file")
+		fs.Usage()
+		return exitcode.Usage
+	}
+	return app.Inspect("lmmtfy", pos[0], detect.Options{SampleRows: *sample}, *asJSON, stdout, stderr)
+}
+
+func cmdInit(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("init", "<input.csv> -o <mapping.yaml> [--name NAME] [--sample N] [--force]", stderr)
+	var output string
+	fs.StringVar(&output, "o", "", "mapping file to write (required)")
+	fs.StringVar(&output, "output", "", "same as -o")
+	name := fs.String("name", "", "mapping name (default: from the input file name)")
+	sample := fs.Int("sample", 10000, "number of rows analysed")
+	force := fs.Bool("force", false, "overwrite the mapping file if it exists")
+
+	pos, code := parse(fs, args)
+	if code >= 0 {
+		return code
+	}
+	if len(pos) != 1 || output == "" {
+		fmt.Fprintln(stderr, "lmmtfy init: need one input file and -o")
+		fs.Usage()
+		return exitcode.Usage
+	}
+	return app.Init(app.InitRequest{
+		Name:        "lmmtfy",
+		Input:       pos[0],
+		Output:      output,
+		MappingName: *name,
+		Force:       *force,
+		Detect:      detect.Options{SampleRows: *sample},
+		Stdout:      stdout,
+		Stderr:      stderr,
+	})
 }
 
 func cmdVersion(stdout io.Writer) int {

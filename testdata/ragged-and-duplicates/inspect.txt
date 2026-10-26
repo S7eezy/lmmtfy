@@ -1,0 +1,18 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  ragged rows  lenient
+  sample       3 rows (whole file)
+
+  #  column  target  type    ok    details     examples
+  1  Name    name    string  100%  max 1 char  "a", "d", "f"
+  2  Name_2  name_2  string  100%  max 1 char  "b", "e", "g"
+  3  Other   other   string  100%  max 1 char  "c", "h"
+
+notes:
+  - 2 of 3 sampled rows do not have 3 fields: ragged_rows set to lenient
+  - duplicate header names: they are numbered (Name, Name_2, ...)

@@ -1,0 +1,11 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       1 rows (whole file)
+
+  #  column  target  type     ok    details  examples
+  1  Amount  amount  integer  100%           "1"

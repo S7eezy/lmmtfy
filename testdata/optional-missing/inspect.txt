@@ -1,0 +1,13 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       1 rows (whole file)
+
+  #  column   target   type     ok    details             examples
+  1  id       id       integer  100%                      "1"
+  2  date     date     date     100%  formats YYYY-MM-DD  "2026-01-01"
+  3  comment  comment  string   100%  max 5 chars         "hello"

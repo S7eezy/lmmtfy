@@ -10,10 +10,12 @@ testdata/<case-name>/
 ├── rejects.csv       expected reject file (absent if no row is rejected)
 ├── report.json       expected summary (hash and duration replaced by placeholders)
 ├── log.txt           expected log and error messages (paths and durations replaced)
-└── exit_code         expected process exit code
+├── exit_code         expected process exit code
+├── inspect.txt       expected `lmmtfy inspect` output
+└── init.yaml         expected `lmmtfy init` mapping (which must convert input.csv)
 ```
 
-Cases run through `internal/app`, the same code path as `lmmtfy convert`.
+Cases run through `internal/app`, the same code path as the `lmmtfy` commands. Detection is also checked against each hand-written mapping: it must find the same input layout.
 
 Comparison is byte for byte: encoding, BOM and line endings are part of the expectation.
 

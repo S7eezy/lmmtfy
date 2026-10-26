@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"lmmtfy/internal/detect"
 	"lmmtfy/internal/golden"
 	"lmmtfy/internal/report"
 )
@@ -54,12 +55,44 @@ func TestGolden(t *testing.T) {
 	})
 }
 
+// TestGoldenDetect runs `inspect` and `init` on every case input and
+// compares their output with inspect.txt and init.yaml. The generated
+// mapping must then convert its own input without error.
+func TestGoldenDetect(t *testing.T) {
+	golden.Run(t, golden.Dir(t), func(t *testing.T, c golden.Case) {
+		var stdout, stderr bytes.Buffer
+		if code := Inspect("lmmtfy", c.Path("input.csv"), detect.Options{}, false, &stdout, &stderr); code != 0 {
+			t.Fatalf("inspect exit code %d: %s", code, stderr.String())
+		}
+		c.Compare(t, "inspect.txt", normalizeLog(stdout.String(), c.Dir, ""))
+
+		tmp := t.TempDir()
+		mapping := filepath.Join(tmp, "init.yaml")
+		stdout.Reset()
+		if code := Init(InitRequest{Name: "lmmtfy", Input: c.Path("input.csv"), Output: mapping, Stdout: &stdout, Stderr: &stderr}); code != 0 {
+			t.Fatalf("init exit code %d: %s", code, stderr.String())
+		}
+		c.CompareFile(t, "init.yaml", mapping)
+
+		plan, _, code := LoadPlan("lmmtfy", mapping, &stderr)
+		if plan == nil {
+			t.Fatalf("generated mapping: exit code %d: %s", code, stderr.String())
+		}
+		code = Convert(ConvertRequest{Name: "lmmtfy", Plan: plan, Input: c.Path("input.csv"), Output: filepath.Join(tmp, "out.csv"), Stderr: &stderr})
+		if code != 0 {
+			t.Errorf("converting with the generated mapping: exit code %d\n%s", code, stderr.String())
+		}
+	})
+}
+
 var duration = regexp.MustCompile(`\d+\.\d{2}s\n`)
 
 // normalizeLog removes what changes from run to run: paths and durations.
 func normalizeLog(log, caseDir, tmp string) []byte {
 	log = strings.ReplaceAll(log, caseDir, "<case>")
-	log = strings.ReplaceAll(log, tmp, "<tmp>")
+	if tmp != "" {
+		log = strings.ReplaceAll(log, tmp, "<tmp>")
+	}
 	return []byte(duration.ReplaceAllString(log, "<duration>\n"))
 }
 

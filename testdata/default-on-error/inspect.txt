@@ -1,0 +1,19 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       3 rows (whole file)
+
+  #  column   target   type     ok    details             examples
+  1  id       id       integer  100%                      "1", "2", "3"
+  2  date     date     date     100%  formats YYYY-MM-DD  "2026-01-01", "2026-01-02", "2026-01-03"
+  3  amount   amount   string   100%  max 7 chars         "abc", "3.14159", "1"
+  4  status   status   string   100%  max 9 chars         "V", "whatever", "CANCELLED"
+  5  country  country  string   100%  max 3 chars         "FRA", "de", "fr"
+  6  comment  comment  string   100%  max 43 chars        "this comment is far too …", "short", "unmatched code"
+
+notes:
+  - amount: 67% of values read as decimal; rejected: abc

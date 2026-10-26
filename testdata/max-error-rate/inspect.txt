@@ -1,0 +1,16 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       4 rows (whole file)
+
+  #  column  target  type     ok    details             examples
+  1  id      id      string   100%  max 1 char          "1", "x", "3"
+  2  date    date    date     100%  formats YYYY-MM-DD  "2026-01-01", "2026-01-02", "2026-01-03"
+  3  amount  amount  integer  100%                      "1", "2", "3"
+
+notes:
+  - id: 50% of values read as integer; rejected: x, y

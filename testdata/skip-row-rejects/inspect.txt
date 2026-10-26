@@ -1,0 +1,20 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       5 rows (whole file)
+
+  #  column   target   type     ok    details       examples
+  1  id       id       integer  100%                "1", "2", "3"
+  2  date     date     string   100%  max 10 chars  "01/01/2026", "31/02/2026", "02/01/2026"
+  3  amount   amount   string   100%  max 4 chars   "10.5", "ten", "7"
+  4  status   status   string   100%  max 1 char    "V", "X", "A"
+  5  country  country  string   100%  max 2 chars   "fr", "be"
+  6  comment  comment  string   100%  max 21 chars  "ok", "bad date", "bad amount and status"
+
+notes:
+  - date: 80% of values read as date DD/MM/YYYY; rejected: 31/02/2026
+  - amount: 80% of values read as decimal; rejected: ten

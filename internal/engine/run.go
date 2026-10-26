@@ -172,19 +172,32 @@ func (r *run) normalizeHeader() ([]string, error) {
 	if r.rawHeader == nil {
 		return nil, nil
 	}
-	header := make([]string, len(r.rawHeader))
+	header, dup := NormalizeHeader(r.rawHeader)
+	if dup != "" && r.plan.dupHeaders == "error" {
+		return nil, &FileError{Reason: fmt.Sprintf("duplicate header %q (set input.duplicate_headers: suffix to number them)", dup)}
+	}
+	return header, nil
+}
+
+// NormalizeHeader trims header names and numbers duplicates: Name, Name_2,
+// Name_3..., skipping names that already exist. dup is the first duplicated
+// name, "" when there is none. Rules refer to columns by these names.
+func NormalizeHeader(raw []string) (header []string, dup string) {
+	header = make([]string, len(raw))
+	trimmed := make([]string, len(raw))
+	for i, h := range raw {
+		trimmed[i] = strings.TrimSpace(h)
+	}
 	seen := map[string]int{}
-	for i, h := range r.rawHeader {
-		h = strings.TrimSpace(h)
+	for i, h := range trimmed {
 		seen[h]++
 		if n := seen[h]; n > 1 {
-			if r.plan.dupHeaders == "error" {
-				return nil, &FileError{Line: 0, Reason: fmt.Sprintf("duplicate header %q (set input.duplicate_headers: suffix to number them)", h)}
+			if dup == "" {
+				dup = h
 			}
-			// Name, Name_2, Name_3... skipping names that already exist.
 			for ; ; n++ {
 				candidate := fmt.Sprintf("%s_%d", h, n)
-				if !slices.Contains(r.rawHeader, candidate) && seen[candidate] == 0 {
+				if !slices.Contains(trimmed, candidate) && seen[candidate] == 0 {
 					h = candidate
 					seen[h]++
 					break
@@ -193,7 +206,7 @@ func (r *run) normalizeHeader() ([]string, error) {
 		}
 		header[i] = h
 	}
-	return header, nil
+	return header, dup
 }
 
 func (r *run) reportMissing(missing []report.MissingColumn) {

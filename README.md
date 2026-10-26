@@ -6,9 +6,11 @@ See [DESIGN.md](DESIGN.md) for the full design.
 
 ## Status
 
-M1: the engine and the `convert` and `validate` commands work. Next: type detection (`inspect`, `init`), then standalone converters (`build`), then the Studio editor.
+M2: conversion, validation and format detection work. Next: standalone converters (`build`), then the Studio editor.
 
 ```bash
+lmmtfy inspect input.csv                                   # what is this file?
+lmmtfy init input.csv -o acme.mapping.yaml                 # draft mapping to review and edit
 lmmtfy convert input.csv --mapping acme.mapping.yaml -o output.csv [--rejects path] [--report report.json] [--log-level warnings] [--strict]
 lmmtfy validate --mapping acme.mapping.yaml [--input input.csv]
 ```

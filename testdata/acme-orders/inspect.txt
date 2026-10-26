@@ -1,0 +1,18 @@
+<case>/input.csv
+  encoding     windows-1252
+  delimiter    ";"
+  header       line 3
+  footer       1 line skipped
+  trim         yes
+  null tokens  none
+  sample       3 rows (whole file)
+
+  #  column       target       type     ok    details                              examples
+  1  N° Commande  n_commande   integer  100%                                       "1001", "1002", "1003"
+  2  Date         date         date     100%  formats DD/MM/YYYY, DD-MM-YYYY       "05/10/2026", "06-10-2026", "07/10/2026"
+  3  Montant TTC  montant_ttc  decimal  100%  decimal ",", thousands " ", scale 2  "1 234,50", "99,9", "12"
+  4  Etat         etat         string   100%  max 1 char                           "V", "A", "E"
+  5  Remarque     remarque     string   100%  max 22 chars, 1 empty                "Livraison rapide", "Client \"VIP\"; rappeler"
+
+notes:
+  - Date: several formats in the same column

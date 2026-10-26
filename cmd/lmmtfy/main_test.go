@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,5 +92,36 @@ func TestValidateCommand(t *testing.T) {
 				t.Errorf("stdout does not contain %q:\n%s", tt.wantStdout, stdout.String())
 			}
 		})
+	}
+}
+
+func TestInspectAndInitCommands(t *testing.T) {
+	input := "../../testdata/acme-orders/input.csv"
+	var stdout, stderr bytes.Buffer
+
+	if code := run([]string{"inspect", input, "--json"}, &stdout, &stderr); code != exitcode.OK {
+		t.Fatalf("inspect --json: exit %d: %s", code, stderr.String())
+	}
+	var res struct {
+		Delimiter string `json:"delimiter"`
+		Columns   []any  `json:"columns"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &res); err != nil || res.Delimiter != ";" || len(res.Columns) != 5 {
+		t.Errorf("inspect --json: %v, %+v", err, res)
+	}
+
+	mapping := filepath.Join(t.TempDir(), "m.yaml")
+	if code := run([]string{"init", input, "-o", mapping, "--name", "acme"}, &stdout, &stderr); code != exitcode.OK {
+		t.Fatalf("init: exit %d: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := run([]string{"init", input, "-o", mapping}, &stdout, &stderr); code != exitcode.Usage || !strings.Contains(stderr.String(), "--force") {
+		t.Errorf("init over existing file: exit %d, stderr %q", code, stderr.String())
+	}
+	if code := run([]string{"init", input, "-o", mapping, "--force"}, &stdout, &stderr); code != exitcode.OK {
+		t.Errorf("init --force: exit %d", code)
+	}
+	if code := run([]string{"inspect", "nope.csv"}, &stdout, &stderr); code != exitcode.IO {
+		t.Errorf("inspect missing file: exit %d", code)
 	}
 }

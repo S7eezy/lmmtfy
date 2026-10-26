@@ -347,12 +347,25 @@ reader ──batches of 1024 rows──▶ workers (one per core) ──▶ appl
 - At most 4 batches per worker are in flight, so memory stays bounded.
 - `--workers N` limits the cores used (default: all). Reading and applying are single-threaded and set the ceiling.
 
-### Detection (Studio and `lmmtfy inspect`)
+### Detection (Studio, `lmmtfy inspect`, `lmmtfy init`)
 
-- **Encoding**: BOM → UTF-8 validity → fallback suggestion `windows-1252`.
-- **Delimiter**: candidates `,` `;` `\t` `|`; pick the one giving the most consistent field count over the sample.
-- **Header row**: first row whose values mostly fail numeric/date parsing while the following rows succeed.
-- **Types**: on a sample (default 10,000 rows), non-null values only, in order integer → decimal (guessing `,` vs `.`) → boolean (known token pairs) → date/datetime (candidate format list, a format must match all sampled values) → string. Each column gets a confidence and up to 5 failing example values.
+Detection reads the first 4 MiB of the file (at most 10,000 data rows) and, for larger files, its last 64 KiB to find a footer.
+
+- **Encoding**: BOM, then UTF-16 recognized by its zero bytes, then UTF-8 validity, else `windows-1252` (superset of latin-1).
+- **Delimiter**: tab, `;`, `|`, `,` — the one giving the most consistent field count over the first 200 records, more fields on ties, then that order (`1;2,50` is two fields either way: `;` wins, since `,` is then most likely a decimal separator).
+- **Header row**: the first record with the usual field count and more than half its cells filled. Records above (titles, export dates) are skipped with `header_row`.
+- **No header**: the candidate header row is data when most typed columns parse it.
+- **Footer**: up to 3 trailing records that do not fit: short rows with few values ("End of export"), rows most typed columns reject ("Total;3;;;"), or a rejected value in a row starting with "Total", "Sum", "End"… Types are inferred without the last records first, since a footer would spoil them.
+- **Trim**, **ragged rows**, **duplicate headers**, **backslash escapes**: set when the sample shows them.
+- **Types**, per column, on non-empty values: each candidate reading (integer, decimal with every separator combination, boolean pairs such as oui/non, 18 date formats, datetimes, times) is tried with the real type converters, so a proposal is guaranteed to convert the sample. The candidate accepting the most values wins, ties broken in that order; it must accept at least 95% of values, else the column is text. The 5% tolerance covers stray bad values, which are listed.
+  - Thousands separators must be consistent (`1 234 567`): `12.34.5` is not an integer.
+  - Numbers with leading zeros (`007`) stay text: they are codes.
+  - Common null tokens (`NULL`, `N/A`, `-`…) in an otherwise typed column become `null_tokens`.
+  - Several date formats in one column are covered with up to 3 formats.
+- **Notes** flag what a human should check: ambiguous day/month order, `.`/`,` read as thousands separators, 8-digit integers that are also valid dates, text columns that almost parse ("80% of values read as date DD/MM/YYYY; rejected: 31/02/2026").
+- Target names are derived from headers: lower-case ASCII, accents removed, underscores (`N° Commande` → `n_commande`); `column_N` without header.
+
+`lmmtfy init` writes a standalone mapping from the result: input options as detected, an inline target with normalized output (UTF-8, ISO dates, `.` decimals, scale from the sample) for the user to adapt, one rule per column with a comment describing what was seen, and `REVIEW:` comments for notes. The generated mapping is compiled before it is written.
 
 Detection only proposes; the user decides.
 
@@ -361,8 +374,8 @@ Detection only proposes; the user decides.
 ```
 lmmtfy convert <input.csv> --mapping <m.yaml> -o <out.csv> [--rejects path] [--report r.json] [--log-level L] [--strict] [--workers N]
 lmmtfy validate --mapping <m.yaml> [--input <input.csv>]     # check config; optionally check an input header against it
-lmmtfy inspect <input.csv> [--sample N]                      # detected dialect, columns, types
-lmmtfy init <input.csv> -o <m.yaml>                          # draft mapping from detection (standalone)
+lmmtfy inspect <input.csv> [--sample N] [--json]             # detected dialect, columns, types
+lmmtfy init <input.csv> -o <m.yaml> [--name N] [--force]     # draft mapping from detection (standalone)
 lmmtfy build --mapping <m.yaml> --os windows|linux|darwin [--arch amd64|arm64] -o <converter>
 lmmtfy version
 ```

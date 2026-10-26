@@ -1,0 +1,17 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       none (data starts on line 1)
+  footer       none
+  trim         no
+  null tokens  none
+  sample       3 rows (whole file)
+
+  #  column  target    type      ok    details                   examples
+  1  -       column_1  integer   100%  thousands "."             "1.250", "12", "7"
+  2  -       column_2  datetime  100%  formats DD/MM/YYYY HH:mm  "15/07/2026 14:30", "15/01/2026 08:00"
+  3  -       column_3  boolean   100%  true "oui", false "non"   "oui", "NON"
+  4  -       column_4  string    100%  max 5 chars               "first", "N/A", "-"
+
+notes:
+  - #1: "." read as a thousands separator; if the values are decimals, set decimal_sep: "."
