@@ -1,0 +1,4 @@
+order_id,order_date,amount,status,country,comment
+1,2026-01-01,0.00,VALIDATED,??,this comment is far 
+2,2026-01-02,3.14,PENDING,DE,short
+3,2026-01-03,1.00,PENDING,FR,unmatched code

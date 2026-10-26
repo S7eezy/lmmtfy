@@ -1,0 +1,4 @@
+summary: failed after 2 rows, no output written, <duration>
+  reason: line 3, column amount: "1;5" is not a decimal number
+  amount: 1 error
+lmmtfy: conversion failed: line 3, column amount: "1;5" is not a decimal number

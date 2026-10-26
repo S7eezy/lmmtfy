@@ -1,0 +1,14 @@
+version: 1
+name: erp-orders
+output:
+  encoding: utf-8
+  delimiter: ","
+  quote_style: minimal
+  line_ending: crlf
+columns:
+  - { name: order_id,   type: integer, required: true, min: 1 }
+  - { name: order_date, type: date, format: "YYYY-MM-DD", required: true }
+  - { name: amount,     type: decimal, scale: 2 }
+  - { name: status,     type: string, allowed_values: [VALIDATED, CANCELLED, PENDING] }
+  - { name: country,    type: string, max_length: 2, case: upper }
+  - { name: comment,    type: string, max_length: 20, on_overflow: truncate }

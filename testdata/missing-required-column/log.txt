@@ -1,0 +1,3 @@
+summary: failed after 0 rows, no output written, <duration>
+  reason: required source columns missing from input: "date" (for order_date), "amount" (for amount)
+lmmtfy: conversion failed: required source columns missing from input: "date" (for order_date), "amount" (for amount)

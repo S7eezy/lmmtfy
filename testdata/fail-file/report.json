@@ -1,0 +1,20 @@
+{
+  "mapping": "fail-fast",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "failed",
+  "failure_reason": "line 3, column amount: \"1;5\" is not a decimal number",
+  "rows_read": 2,
+  "rows_written": 1,
+  "rows_rejected": 0,
+  "rows_with_errors": 1,
+  "columns": [
+    {
+      "name": "amount",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    }
+  ],
+  "duration_seconds": 0
+}

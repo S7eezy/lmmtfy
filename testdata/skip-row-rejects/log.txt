@@ -1,0 +1,10 @@
+ERROR line 3, column order_date: "31/02/2026" does not match date format DD/MM/YYYY (row rejected)
+ERROR line 4, column amount: "ten" is not a decimal number (row rejected)
+ERROR line 4, column status: "X" has no entry in the value map (row rejected)
+ERROR line 6, column order_id: 0 is less than the minimum 1 (row rejected)
+summary: ok, 5 rows read, 2 written, 3 rejected, 3 with errors, <duration>
+  order_id: 1 error
+  order_date: 1 error
+  amount: 1 error
+  status: 1 error
+  comment: 1 warning

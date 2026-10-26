@@ -1,0 +1,31 @@
+{
+  "mapping": "defaults",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 3,
+  "rows_written": 3,
+  "rows_rejected": 0,
+  "rows_with_errors": 1,
+  "columns": [
+    {
+      "name": "amount",
+      "errors": 1,
+      "defaulted": 1,
+      "warnings": 0
+    },
+    {
+      "name": "country",
+      "errors": 1,
+      "defaulted": 1,
+      "warnings": 0
+    },
+    {
+      "name": "comment",
+      "errors": 0,
+      "defaulted": 0,
+      "warnings": 1
+    }
+  ],
+  "duration_seconds": 0
+}

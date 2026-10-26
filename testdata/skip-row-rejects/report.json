@@ -1,0 +1,43 @@
+{
+  "mapping": "skip-rows",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 5,
+  "rows_written": 2,
+  "rows_rejected": 3,
+  "rows_with_errors": 3,
+  "columns": [
+    {
+      "name": "order_id",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    },
+    {
+      "name": "order_date",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    },
+    {
+      "name": "amount",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    },
+    {
+      "name": "status",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    },
+    {
+      "name": "comment",
+      "errors": 0,
+      "defaulted": 0,
+      "warnings": 1
+    }
+  ],
+  "duration_seconds": 0
+}

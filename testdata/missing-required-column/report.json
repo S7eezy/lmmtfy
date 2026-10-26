@@ -1,0 +1,12 @@
+{
+  "mapping": "missing",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "failed",
+  "failure_reason": "required source columns missing from input: \"date\" (for order_date), \"amount\" (for amount)",
+  "rows_read": 0,
+  "rows_written": 0,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "duration_seconds": 0
+}

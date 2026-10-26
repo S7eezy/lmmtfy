@@ -1,0 +1,4 @@
+id,date,amount,comment
+1,2026-01-01,1.5,ok
+2,2026-01-02,1;5,bad amount
+3,2026-01-03,2,never reached

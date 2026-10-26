@@ -1,0 +1,4 @@
+id,date,amount,status,country,comment,_line,_column,_error
+2,31/02/2026,10.5,V,fr,bad date,3,order_date,"""31/02/2026"" does not match date format DD/MM/YYYY"
+3,02/01/2026,ten,X,fr,bad amount and status,4,amount; status,"""ten"" is not a decimal number; ""X"" has no entry in the value map"
+0,04/01/2026,7,A,be,id below minimum,6,order_id,0 is less than the minimum 1

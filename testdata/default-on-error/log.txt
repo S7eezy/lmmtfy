@@ -1,0 +1,7 @@
+ERROR line 2, column amount: "abc" is not a decimal number (default used)
+ERROR line 2, column country: "FRA" is longer than 2 characters (default used)
+WARN  line 2, column comment: truncated to 20 characters
+summary: ok, 3 rows read, 3 written, 0 rejected, 1 with errors, <duration>
+  amount: 1 error, 1 defaulted
+  country: 1 error, 1 defaulted
+  comment: 1 warning

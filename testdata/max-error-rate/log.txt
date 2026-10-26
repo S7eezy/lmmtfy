@@ -1,0 +1,6 @@
+ERROR line 3, column order_id: "x" is not an integer (row rejected)
+ERROR line 5, column order_id: "y" is not an integer (row rejected)
+summary: failed after 4 rows, no output written, <duration>
+  reason: 2 of 4 rows have errors (50.00%), more than the allowed 25.00% (on_error.max_error_rate)
+  order_id: 2 errors
+lmmtfy: conversion failed: 2 of 4 rows have errors (50.00%), more than the allowed 25.00% (on_error.max_error_rate)

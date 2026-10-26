@@ -1,0 +1,11 @@
+version: 1
+name: skip-rows
+target: target.yaml
+on_error: { strategy: skip_row }
+columns:
+  order_id:   { source: id }
+  order_date: { source: date, formats: ["DD/MM/YYYY"] }
+  amount:     { source: amount }
+  status:     { source: status, map: { V: VALIDATED, A: CANCELLED }, map_unmatched: error }
+  country:    { source: country }
+  comment:    { source: comment }

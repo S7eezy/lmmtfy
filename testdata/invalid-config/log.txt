@@ -1,0 +1,7 @@
+lmmtfy: <case>/mapping.yaml: invalid configuration:
+  error: input.delimiter: must be a single character (or an alias: comma, semicolon, tab, pipe, space), got ";;"
+  error: columns.ghost: no target column with this name
+  error: columns.day: required target column is not mapped
+  error: columns.amount.thousands_sep: must differ from decimal_sep
+  error: target.columns.amount.format: not valid for type decimal
+  error: target.columns.flag.default: "maybe" is not a valid boolean for this column: "maybe" is not a boolean (expected one of: true, false)

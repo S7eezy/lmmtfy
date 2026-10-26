@@ -1,0 +1,2 @@
+ERROR line 4: row has 4 fields, expected 3 (row rejected)
+summary: ok, 3 rows read, 2 written, 1 rejected, 1 with errors, <duration>

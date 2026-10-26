@@ -6,7 +6,14 @@ See [DESIGN.md](DESIGN.md) for the full design.
 
 ## Status
 
-M0: project scaffold. Nothing converts yet.
+M1: the engine and the `convert` and `validate` commands work. Next: type detection (`inspect`, `init`), then standalone converters (`build`), then the Studio editor.
+
+```bash
+lmmtfy convert input.csv --mapping acme.mapping.yaml -o output.csv [--rejects path] [--report report.json] [--log-level warnings] [--strict]
+lmmtfy validate --mapping acme.mapping.yaml [--input input.csv]
+```
+
+Example mappings, with their inputs and expected outputs, live in [testdata/](testdata/).
 
 ## Development
 

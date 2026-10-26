@@ -1,0 +1,4 @@
+order_id,order_date,amount,status,country,comment
+1001,2026-10-05,1234.50,VALIDATED,FR,Livraison rapide
+1002,2026-10-06,99.90,CANCELLED,FR,-
+1003,2026-10-07,12.00,PENDING,FR,"Client ""VIP""; rappel"

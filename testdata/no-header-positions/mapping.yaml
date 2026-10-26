@@ -1,0 +1,17 @@
+version: 1
+name: positions
+target:
+  output: { delimiter: ";", line_ending: lf, null_value: "NULL" }
+  columns:
+    - { name: active,  type: boolean, true_value: "1", false_value: "0" }
+    - { name: qty,     type: integer }
+    - { name: seen_at, type: datetime, format: "YYYY-MM-DD HH:mm:ssZ", timezone: UTC }
+    - { name: label,   type: string }
+input:
+  header: false
+  null_tokens: ["N/A", "-"]
+columns:
+  active:  { source_index: 3, true_values: [oui], false_values: [non] }
+  qty:     { source_index: 1, thousands_sep: "." }
+  seen_at: { source_index: 2, formats: ["DD/MM/YYYY HH:mm"], timezone: Europe/Paris }
+  label:   { source_index: 4 }

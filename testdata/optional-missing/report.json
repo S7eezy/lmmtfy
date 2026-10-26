@@ -1,0 +1,28 @@
+{
+  "mapping": "optional",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 1,
+  "rows_written": 1,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "missing_optional_columns": [
+    {
+      "source": "amount",
+      "target": "amount",
+      "action": "omitted"
+    },
+    {
+      "source": "Etat",
+      "target": "status",
+      "action": "default"
+    },
+    {
+      "source": "Pays",
+      "target": "country",
+      "action": "empty"
+    }
+  ],
+  "duration_seconds": 0
+}

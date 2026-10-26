@@ -1,0 +1,11 @@
+version: 1
+name: quoting
+target:
+  output: { bom: true, quote_style: always, escape: backslash, line_ending: lf }
+  columns:
+    - { name: ref, type: string }
+    - { name: note, type: string }
+input: { delimiter: tab }
+columns:
+  ref:  { source: Ref }
+  note: { source: Note }

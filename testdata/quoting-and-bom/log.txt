@@ -1,0 +1,1 @@
+summary: ok, 2 rows read, 2 written, 0 rejected, 0 with errors, <duration>

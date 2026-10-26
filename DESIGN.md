@@ -170,9 +170,9 @@ input:
   skip_rows_after_header: 0
   skip_footer: 1            # trailing lines to ignore
   comment_prefix: "#"       # lines starting with this are ignored
-  null_tokens: ["", "NULL", "N/A", "-"]
-  trim: true
-  ragged_rows: error        # error | pad | truncate
+  null_tokens: ["NULL", "N/A", "-"]   # read as empty, like ""
+  trim: true                # default false
+  ragged_rows: error        # error | pad (short rows) | truncate (long rows) | lenient (both)
   duplicate_headers: suffix # error | suffix (Name, Name_2, ...)
 
 on_error:
@@ -232,7 +232,21 @@ A standalone mapping replaces `target: ./file` with an inline object holding `ou
 | `datetime` | `format`, `timezone` | `formats`, `timezone` (assumed for naive values) |
 | `time` | `format` | `formats` |
 
-Date tokens are human-readable (`YYYY`, `YY`, `MM`, `M`, `DD`, `D`, `HH`, `mm`, `ss`, `SSS`, `MMM` for month names, …) and translated internally; users never see Go's reference-date layouts.
+Date tokens are human-readable and translated internally; users never see Go's reference-date layouts:
+
+| Token | Meaning | Token | Meaning |
+|---|---|---|---|
+| `YYYY` / `YY` | year | `HH` / `hh` / `h` | hour 24h / 12h / 12h unpadded |
+| `MM` / `M` | month (`M` accepts 1 or 2 digits) | `mm` / `m` | minutes |
+| `MMM` / `MMMM` | `Jan` / `January` (English only) | `ss` / `s` | seconds |
+| `DD` / `D` | day (`D` accepts 1 or 2 digits) | `.SSS` `.SSSSSS` | fractional seconds, after `.` or `,` |
+| `A` / `a` | `PM` / `pm` | `Z` / `ZZ` | offset `+02:00` (or `Z`) / `+0200` |
+
+Punctuation, spaces and `T` are literal. Other letters and digits are rejected, so a typo cannot silently become a wrong format.
+
+Delimiters and quotes accept aliases for awkward characters: `tab`, `comma`, `semicolon`, `pipe`, `space`, and `quote: none` to disable quoting.
+
+Scalars are read as written: `01` stays `01`, `1.50` stays `1.50`, `yes` stays `yes`. YAML's own rules still apply, so values starting with `-`, `|`, `*` or containing `: ` must be quoted.
 
 Common to all types: `required`, `default`.
 
@@ -257,6 +271,8 @@ WARN  configuration has 3 optional columns missing from input: bla, bli, blo
 `omit` changes the output column set, which the target software may reject. Studio shows a warning when `omit` is selected, and `lmmtfy validate` reports it.
 
 Precedence: mapping `default` overrides target `default`.
+
+Defaults are written in the **output** representation (`default: "0,00"` for a target with `decimal_sep: ","`) and checked when the mapping is loaded. `default: ""` means an empty value.
 
 ### 4.6 Error strategies
 
@@ -300,7 +316,7 @@ Cell pipeline, in order:
 1. Extract raw value (by resolved index).
 2. Trim (if enabled).
 3. Null token check → empty.
-4. Value map (exact match on the raw string; `map_unmatched` decides the rest).
+4. Value map (exact match on the raw string; `map_unmatched` decides the rest). Mapped values are still parsed in step 6, so they are written in the input representation. `map_unmatched` without `map` is a configuration error.
 5. Empty handling (`if_empty`).
 6. Parse into the typed value using mapping input options.
 7. Validate against target constraints.
@@ -311,9 +327,11 @@ Failure at any step → the column's error strategy.
 ### Streaming and safety
 
 - Row by row, constant memory, regardless of file size.
+- Header names are trimmed before matching; a BOM never ends up in a header.
+- Text after a closing quote, before the next delimiter, is kept as part of the field (`"ab"c` reads as `abc`). Real-world files do this.
 - Custom CSV tokenizer: Go's `encoding/csv` only supports `"` as quote and no escape character. Benchmarked against `encoding/csv` for the default dialect.
 - Output written to a temp file next to the destination, then renamed on success. A failed conversion never leaves a partial output.
-- Target: 1 GB in well under a minute on a laptop, memory under 100 MB.
+- Target: 1 GB in well under a minute on a laptop, memory under 100 MB. Measured at M1 (Apple M-series laptop): 956 MB / 20.6 M rows in 18 s, 14 MB peak memory. The CSV reader alone runs at about 440 MB/s.
 
 ### Detection (Studio and `lmmtfy inspect`)
 

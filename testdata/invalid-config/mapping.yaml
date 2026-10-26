@@ -1,0 +1,11 @@
+version: 1
+name: broken
+target:
+  columns:
+    - { name: amount, type: decimal, scale: 2, format: "YYYY" }
+    - { name: day, type: date, required: true }
+    - { name: flag, type: boolean, default: maybe }
+input: { delimiter: ";;" }
+columns:
+  amount: { source: Amount, decimal_sep: ",", thousands_sep: "," }
+  ghost:  { source: Ghost }

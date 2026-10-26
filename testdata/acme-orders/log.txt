@@ -1,0 +1,2 @@
+summary: ok, 3 rows read, 3 written, 0 rejected, 0 with errors, <duration>
+  comment: 1 warning

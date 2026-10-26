@@ -1,0 +1,11 @@
+version: 1
+name: optional
+target: target.yaml
+logging: { level: warnings }
+columns:
+  order_id:   { source: id }
+  order_date: { source: date }
+  amount:     { source: amount, optional: true, if_missing: omit }
+  status:     { source: Etat, optional: true, if_missing: default, default: PENDING }
+  country:    { source: Pays, optional: true }
+  comment:    { source: comment }

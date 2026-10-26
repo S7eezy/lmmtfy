@@ -1,0 +1,4 @@
+id,date,amount,status,country,comment
+1,2026-01-01,abc,V,FRA,this comment is far too long for the target
+2,2026-01-02,3.14159,whatever,de,short
+3,2026-01-03,1,CANCELLED,fr,unmatched code

@@ -1,0 +1,6 @@
+id,date,amount,status,country,comment
+1,01/01/2026,10.5,V,fr,ok
+2,31/02/2026,10.5,V,fr,bad date
+3,02/01/2026,ten,X,fr,bad amount and status
+4,03/01/2026,7,A,be,ok
+0,04/01/2026,7,A,be,id below minimum

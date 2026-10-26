@@ -1,0 +1,20 @@
+{
+  "mapping": "error-rate",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "failed",
+  "failure_reason": "2 of 4 rows have errors (50.00%), more than the allowed 25.00% (on_error.max_error_rate)",
+  "rows_read": 4,
+  "rows_written": 2,
+  "rows_rejected": 2,
+  "rows_with_errors": 2,
+  "columns": [
+    {
+      "name": "order_id",
+      "errors": 2,
+      "defaulted": 0,
+      "warnings": 0
+    }
+  ],
+  "duration_seconds": 0
+}

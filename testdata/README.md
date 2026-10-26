@@ -5,11 +5,15 @@ One directory per case. The engine, the CLI and a built converter each run every
 ```
 testdata/<case-name>/
 ├── input.csv         source file, in the encoding and dialect under test
-├── mapping.yaml      mapping to apply (may reference a target file in the same directory)
-├── output.csv        expected output
+├── mapping.yaml      mapping to apply (may reference target.yaml in the same directory)
+├── output.csv        expected output (absent when the conversion fails)
 ├── rejects.csv       expected reject file (absent if no row is rejected)
-└── report.json       expected summary (durations excluded)
+├── report.json       expected summary (hash and duration replaced by placeholders)
+├── log.txt           expected log and error messages (paths and durations replaced)
+└── exit_code         expected process exit code
 ```
+
+Cases run through `internal/app`, the same code path as `lmmtfy convert`.
 
 Comparison is byte for byte: encoding, BOM and line endings are part of the expectation.
 

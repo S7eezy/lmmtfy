@@ -1,0 +1,10 @@
+version: 1
+name: fail-fast
+target: target.yaml
+columns:
+  order_id:   { source: id }
+  order_date: { source: date }
+  amount:     { source: amount }
+  status:     { default: PENDING }
+  country:    { default: FR }
+  comment:    { source: comment }

@@ -1,0 +1,16 @@
+version: 1
+name: acme-orders
+target: target.yaml
+input:
+  encoding: latin-1
+  delimiter: ";"
+  header_row: 3
+  skip_footer: 1
+  trim: true
+columns:
+  order_id:   { source: "N° Commande" }
+  order_date: { source: "Date", formats: ["DD/MM/YYYY", "DD-MM-YYYY"] }
+  amount:     { source: "Montant TTC", decimal_sep: ",", thousands_sep: " " }
+  status:     { source: "Etat", map: { V: VALIDATED, A: CANCELLED, E: PENDING } }
+  country:    { default: "fr" }
+  comment:    { source: "Remarque", optional: true, if_empty: default, default: "-" }

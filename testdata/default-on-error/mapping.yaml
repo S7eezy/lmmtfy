@@ -1,0 +1,12 @@
+version: 1
+name: defaults
+target: target.yaml
+on_error: { strategy: skip_row }
+logging: { level: warnings }
+columns:
+  order_id:   { source: id }
+  order_date: { source: date }
+  amount:     { source: amount, on_error: default, default: "0" }
+  status:     { source: status, map: { V: VALIDATED }, map_unmatched: default, default: PENDING }
+  country:    { source: country, on_error: default, default: "??" }
+  comment:    { source: comment }

@@ -1,0 +1,19 @@
+{
+  "mapping": "acme-orders",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 3,
+  "rows_written": 3,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "columns": [
+    {
+      "name": "comment",
+      "errors": 0,
+      "defaulted": 0,
+      "warnings": 1
+    }
+  ],
+  "duration_seconds": 0
+}

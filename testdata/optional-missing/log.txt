@@ -1,0 +1,5 @@
+WARN  configuration has 3 optional columns missing from input: amount, Etat, Pays
+      amount → amount: omitted from output
+      Etat → status: default "PENDING"
+      Pays → country: left empty
+summary: ok, 1 row read, 1 written, 0 rejected, 0 with errors, <duration>

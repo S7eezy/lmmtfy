@@ -1,0 +1,11 @@
+version: 1
+name: error-rate
+target: target.yaml
+on_error: { strategy: skip_row, max_error_rate: 0.25 }
+columns:
+  order_id:   { source: id }
+  order_date: { source: date }
+  amount:     { source: amount }
+  status:     { default: PENDING }
+  country:    { default: FR }
+  comment:    { default: "" }

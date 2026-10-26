@@ -72,6 +72,37 @@ func (c Case) Compare(t testing.TB, name string, got []byte) {
 	}
 }
 
+// CompareFile compares the file at path with the expected file name. When
+// path does not exist, the expected file must not exist either: this is how
+// a case says "no output" or "no reject file".
+func (c Case) CompareFile(t testing.TB, name, path string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		c.CompareAbsent(t, name)
+		return
+	}
+	if err != nil {
+		t.Fatalf("golden case %s: %v", c.Name, err)
+	}
+	c.Compare(t, name, got)
+}
+
+// CompareAbsent checks that the expected file name does not exist.
+func (c Case) CompareAbsent(t testing.TB, name string) {
+	t.Helper()
+	path := c.Path(name)
+	if os.Getenv(UpdateEnv) != "" {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("golden case %s: %v", c.Name, err)
+		}
+		return
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Errorf("golden case %s: %s is expected but was not produced", c.Name, name)
+	}
+}
+
 // firstDiff describes the first differing line, line endings included.
 func firstDiff(want, got []byte) string {
 	wantLines := bytes.SplitAfter(want, []byte("\n"))

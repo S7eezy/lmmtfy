@@ -1,0 +1,14 @@
+version: 1
+name: ragged
+target:
+  output: { line_ending: lf }
+  columns:
+    - { name: first, type: string }
+    - { name: second, type: string }
+    - { name: other, type: string }
+input: { ragged_rows: pad, duplicate_headers: suffix }
+on_error: { strategy: skip_row }
+columns:
+  first:  { source: Name }
+  second: { source: Name_2 }
+  other:  { source: Other }
