@@ -1,0 +1,16 @@
+# Build output
+/dist/
+
+# Runner binaries are build artifacts, embedded into lmmtfy at build time
+/internal/runners/bin/*
+!/internal/runners/bin/.gitkeep
+
+# Go
+*.test
+*.out
+coverage.*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
