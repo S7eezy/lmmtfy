@@ -394,42 +394,51 @@ Exit codes:
 
 ### Build
 
-`lmmtfy build` (or Studio "Export converter"):
-
-1. Load the mapping, resolve the target (inline it), validate.
-2. Serialize the resolved mapping, gzip it.
-3. Copy the embedded runner for the chosen OS/arch and write the payload into its **payload slot**.
-4. macOS only: regenerate the ad-hoc code signature.
-
-The payload slot is a reserved, initialized 1 MiB byte array compiled into the runner (a Go package-level variable starting with a unique marker). Because it is initialized, it lives in the binary's data section, so `build` can find the marker and overwrite the slot in place without changing the file layout. Mappings are a few KB; 1 MiB is far more than enough, and `build` refuses a payload that does not fit.
-
-Slot layout:
-
 ```
-["LMMTFY-SLOT\x00\x01"][u32 metadata length][metadata JSON][u32 payload length][gzip(resolved mapping YAML)][zero padding…]
+lmmtfy build --mapping acme.mapping.yaml --os windows|linux|darwin [--arch amd64|arm64] -o acme-converter
 ```
 
-Metadata: mapping name, SHA-256 of the resolved mapping, engine version, build date.
+`--arch` defaults to amd64, arm64 for darwin; `.exe` is added for Windows. Studio's "Export converter" does the same.
 
-At startup the runner reads the slot variable directly from memory (no file access to its own executable), validates the mapping. Empty slot → refuses to run.
+1. Load the mapping, resolve the target (inline it), validate. An invalid mapping never becomes a converter.
+2. Serialize the resolved mapping and gzip it.
+3. Take the embedded runner template for the chosen platform and write the payload into its **payload slot**.
+4. macOS: regenerate the ad-hoc code signature, then verify it.
+
+The payload slot is a reserved, initialized 1 MiB byte array compiled into the runner (package `internal/payload/slot`, imported only by the runner). Because it is initialized, the compiler stores all of it in the executable file, so `build` can find its marker and overwrite the slot in place without changing the file layout. The marker is written forwards only in the slot's own initializer (other code spells it backwards), and `build` refuses a template where it does not appear exactly once. Mappings are a few KB compressed; `build` refuses one that does not fit.
+
+Slot layout (lengths little-endian):
+
+```
+[marker "LMMTFY-PAYLOAD-SLOT-v1"][2 zero bytes][u32 metadata length][metadata JSON]
+[u32 mapping length][gzip(resolved mapping YAML)][SHA-256 of the fields since the marker][zero padding…]
+```
+
+Metadata: mapping name, SHA-256 of the resolved mapping, engine version, platform, build date, building lmmtfy version.
+
+At startup the converter reads the slot from memory (it never opens its own executable), checks the checksum, decompresses and compiles the mapping. An empty slot (the bare template) or a damaged one refuses to run, with exit code 2.
 
 Why a slot rather than appending data at the end of the file: the file structure stays valid on every OS, and on macOS the signature can be regenerated over a well-formed binary.
+
+Templates are embedded gzipped in `lmmtfy` (about 2 MB each instead of 6), so the CLI carrying all five platforms weighs about 17 MB. `internal/build` is a separate package from `internal/app` for that reason: the runner uses `app`, and must not contain the other runners.
 
 ### Usage
 
 ```
-acme-converter <input.csv> <output.csv> [--rejects path] [--report r.json] [--log-level L] [--strict]
-acme-converter --info            # mapping name, hash, engine version, build date
+acme-converter <input.csv> <output.csv> [--rejects path] [--report r.json] [--log-level L] [--strict] [--workers N]
+acme-converter --info            # mapping name, hash, engine version, platform, build date
 acme-converter --print-config    # embedded mapping, for audit
 ```
 
-Same exit codes as the CLI. The mapping cannot be changed at run time; that is the point.
+Same engine, messages and exit codes as `lmmtfy convert` (the code is shared, in `internal/app`). Messages are prefixed with the converter's file name. The mapping cannot be changed at run time; that is the point.
+
+Tests build a real converter for every golden case and run it as a separate process: output, reject file, report, log and exit code must equal the CLI's expected files. Converters for all five platforms are built in tests, decoded back, and their signatures verified.
 
 ### Platform notes
 
-- **Windows**: runners are unsigned. If Authenticode signing is ever required, sign the converter *after* `build` (patching the slot would invalidate an earlier signature).
+- **Windows**: converters are unsigned. If Authenticode signing is ever required, sign the converter *after* `build` (patching the slot would invalidate an earlier signature).
 - **Linux**: static binary, no dependencies.
-- **macOS**: Apple Silicon refuses to run any unsigned binary, and patching the slot invalidates the signature the Go linker applied. `build` therefore regenerates the ad-hoc signature itself, in pure Go (code-signature hashing ported from the Go toolchain's own `cmd/internal/codesign`, BSD-licensed). This works from any OS: a Linux or Windows machine can produce a working macOS converter. Converters are not notarized; copied over a network share or USB they run directly, downloaded through a browser they carry the quarantine flag and need a right-click → Open the first time.
+- **macOS**: Apple Silicon refuses to run a binary whose code signature does not match its content, and patching the slot changes some pages. The Go linker signs darwin/arm64 binaries "ad hoc": a code directory holding the SHA-256 of every 4 KiB page. `build` recomputes those hashes in pure Go (the signature keeps its size and layout), so any OS can produce a working macOS converter; `codesign --verify --strict` accepts the result. A converter signed with a real certificate after building would have to be signed again if rebuilt. darwin/amd64 binaries are not signed by the Go linker, which Intel Macs accept. Converters are not notarized: copied over a network share or USB they run directly; downloaded through a browser they carry the quarantine flag and need right-click → Open the first time.
 
 ## 8. Studio (GUI)
 

@@ -2,7 +2,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"lmmtfy/internal/app"
+	"lmmtfy/internal/build"
 	"lmmtfy/internal/detect"
 	"lmmtfy/internal/exitcode"
 	"lmmtfy/internal/runners"
@@ -27,6 +27,7 @@ Commands:
   validate  check a mapping, and optionally an input file against it
   inspect   detect the format and column types of a CSV file
   init      write a draft mapping for a CSV file
+  build     create a standalone converter from a mapping
   version   print version and embedded converter platforms
   help      show this help
 
@@ -53,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdInspect(args[1:], stdout, stderr)
 	case "init":
 		return cmdInit(args[1:], stdout, stderr)
+	case "build":
+		return cmdBuild(args[1:], stdout, stderr)
 	case "version":
 		return cmdVersion(stdout)
 	case "help", "-h", "--help":
@@ -76,7 +79,7 @@ func cmdConvert(args []string, stderr io.Writer, now func() time.Time) int {
 	strict := fs.Bool("strict", false, "exit with code 1 when any row had an error, even if handled")
 	workers := fs.Int("workers", 0, "rows are converted on this many CPU cores (default: all)")
 
-	pos, code := parse(fs, args)
+	pos, code := app.ParseArgs(fs, args)
 	if code >= 0 {
 		return code
 	}
@@ -110,7 +113,7 @@ func cmdValidate(args []string, stdout, stderr io.Writer) int {
 	mapping := fs.String("mapping", "", "mapping file (required)")
 	input := fs.String("input", "", "also check this input file's header against the mapping")
 
-	pos, code := parse(fs, args)
+	pos, code := app.ParseArgs(fs, args)
 	if code >= 0 {
 		return code
 	}
@@ -127,7 +130,7 @@ func cmdInspect(args []string, stdout, stderr io.Writer) int {
 	sample := fs.Int("sample", 10000, "number of rows analysed")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 
-	pos, code := parse(fs, args)
+	pos, code := app.ParseArgs(fs, args)
 	if code >= 0 {
 		return code
 	}
@@ -148,7 +151,7 @@ func cmdInit(args []string, stdout, stderr io.Writer) int {
 	sample := fs.Int("sample", 10000, "number of rows analysed")
 	force := fs.Bool("force", false, "overwrite the mapping file if it exists")
 
-	pos, code := parse(fs, args)
+	pos, code := app.ParseArgs(fs, args)
 	if code >= 0 {
 		return code
 	}
@@ -169,6 +172,36 @@ func cmdInit(args []string, stdout, stderr io.Writer) int {
 	})
 }
 
+func cmdBuild(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("build", "--mapping <mapping.yaml> --os windows|linux|darwin [--arch amd64|arm64] -o <converter>", stderr)
+	mapping := fs.String("mapping", "", "mapping file (required)")
+	goos := fs.String("os", "", "platform of the converter: windows, linux or darwin (required)")
+	arch := fs.String("arch", "", "processor: amd64 or arm64 (default: amd64, arm64 for darwin)")
+	var output string
+	fs.StringVar(&output, "o", "", "converter file to write (required; .exe is added for windows)")
+	fs.StringVar(&output, "output", "", "same as -o")
+
+	pos, code := app.ParseArgs(fs, args)
+	if code >= 0 {
+		return code
+	}
+	if len(pos) != 0 || *mapping == "" || *goos == "" || output == "" {
+		fmt.Fprintln(stderr, "lmmtfy build: need --mapping, --os and -o")
+		fs.Usage()
+		return exitcode.Usage
+	}
+	return build.Run(build.Request{
+		Name:    "lmmtfy",
+		Mapping: *mapping,
+		OS:      *goos,
+		Arch:    *arch,
+		Output:  output,
+		Stdout:  stdout,
+		Stderr:  stderr,
+		Now:     time.Now,
+	})
+}
+
 func cmdVersion(stdout io.Writer) int {
 	fmt.Fprintf(stdout, "lmmtfy %s\n", version.Version)
 
@@ -186,33 +219,5 @@ func cmdVersion(stdout io.Writer) int {
 }
 
 func newFlagSet(name, synopsis string, stderr io.Writer) *flag.FlagSet {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: lmmtfy %s %s\n\nOptions:\n", name, synopsis)
-		fs.PrintDefaults()
-	}
-	return fs
-}
-
-// parse parses flags placed anywhere among the positional arguments: Go's
-// flag package stops at the first positional one, so `convert in.csv -o x`
-// would otherwise ignore -o. It returns the positional arguments, and an
-// exit code >= 0 when the command must stop.
-func parse(fs *flag.FlagSet, args []string) ([]string, int) {
-	var pos []string
-	for {
-		if err := fs.Parse(args); err != nil {
-			if errors.Is(err, flag.ErrHelp) {
-				return nil, exitcode.OK
-			}
-			return nil, exitcode.Usage
-		}
-		args = fs.Args()
-		if len(args) == 0 {
-			return pos, -1
-		}
-		pos = append(pos, args[0])
-		args = args[1:]
-	}
+	return app.NewFlagSet(name, "lmmtfy "+name+" "+synopsis, stderr)
 }

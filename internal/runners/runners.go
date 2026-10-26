@@ -1,16 +1,18 @@
 // Package runners gives access to the prebuilt converter templates (cmd/runner)
 // compiled into lmmtfy binaries.
 //
-// `make runners` cross-compiles cmd/runner for every supported platform into the
-// bin/ directory next to this file; go:embed then bakes those files into
-// whichever binary imports this package. A plain `go build` without
-// `make runners` still compiles (bin/ holds a placeholder), but no runner is
-// available at run time.
+// `make runners` cross-compiles cmd/runner for every supported platform into
+// the bin/ directory next to this file, gzipped (they shrink by about half);
+// go:embed then bakes those files into whichever binary imports this
+// package. A plain `go build` without `make runners` still compiles (bin/
+// holds a placeholder), but no runner is available at run time.
 package runners
 
 import (
+	"compress/gzip"
 	"embed"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 )
@@ -39,7 +41,7 @@ var Supported = []Target{
 	{"darwin", "amd64"},
 }
 
-// FileName is the name of the runner binary for t inside bin/.
+// FileName is the name of the runner binary for t, before compression.
 func FileName(t Target) string {
 	name := "runner-" + t.OS + "-" + t.Arch
 	if t.OS == "windows" {
@@ -48,8 +50,9 @@ func FileName(t Target) string {
 	return name
 }
 
-// parseFileName is the inverse of FileName.
+// parseFileName is the inverse of FileName, ignoring a .gz suffix.
 func parseFileName(name string) (Target, bool) {
+	name = strings.TrimSuffix(name, ".gz")
 	rest, ok := strings.CutPrefix(strings.TrimSuffix(name, ".exe"), "runner-")
 	if !ok {
 		return Target{}, false
@@ -61,13 +64,18 @@ func parseFileName(name string) (Target, bool) {
 	return Target{goos, goarch}, true
 }
 
-// Get returns the runner binary for t.
+// Get returns the runner binary for t, decompressed.
 func Get(t Target) ([]byte, error) {
-	b, err := files.ReadFile("bin/" + FileName(t))
+	f, err := files.Open("bin/" + FileName(t) + ".gz")
 	if err != nil {
-		return nil, fmt.Errorf("no converter template embedded for %s (build with `make build`)", t)
+		return nil, fmt.Errorf("no converter template embedded for %s (build lmmtfy with `make build`)", t)
 	}
-	return b, nil
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(zr)
 }
 
 // Available lists the targets whose runner is embedded, sorted by file name.

@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"lmmtfy/internal/exitcode"
+	"lmmtfy/internal/runners"
 )
 
 func TestRun(t *testing.T) {
@@ -123,5 +125,33 @@ func TestInspectAndInitCommands(t *testing.T) {
 	}
 	if code := run([]string{"inspect", "nope.csv"}, &stdout, &stderr); code != exitcode.IO {
 		t.Errorf("inspect missing file: exit %d", code)
+	}
+}
+
+func TestBuildCommand(t *testing.T) {
+	dir := t.TempDir()
+	mapping := "../../testdata/acme-orders/mapping.yaml"
+	var stdout, stderr bytes.Buffer
+
+	if code := run([]string{"build", "--mapping", mapping, "--os", "plan9", "-o", filepath.Join(dir, "x")}, &stdout, &stderr); code != exitcode.Usage || !strings.Contains(stderr.String(), "unsupported platform plan9/amd64") {
+		t.Errorf("unsupported platform: exit %d, %q", code, stderr.String())
+	}
+	if code := run([]string{"build", "--mapping", "../../testdata/invalid-config/mapping.yaml", "--os", "linux", "-o", filepath.Join(dir, "x")}, &stdout, &stderr); code != exitcode.Usage {
+		t.Errorf("invalid mapping: exit %d", code)
+	}
+	if code := run([]string{"build", "--os", "linux"}, &stdout, &stderr); code != exitcode.Usage {
+		t.Errorf("missing flags: exit %d", code)
+	}
+
+	if len(runners.Available()) == 0 {
+		t.Skip("no converter templates embedded: run `make build` first")
+	}
+	stdout.Reset()
+	out := filepath.Join(dir, "acme-converter")
+	if code := run([]string{"build", "--mapping", mapping, "--os", "windows", "-o", out}, &stdout, &stderr); code != exitcode.OK {
+		t.Fatalf("build: exit %d, %s", code, stderr.String())
+	}
+	if _, err := os.Stat(out + ".exe"); err != nil || !strings.Contains(stdout.String(), "for windows/amd64") {
+		t.Errorf("windows converter: %v, %q", err, stdout.String())
 	}
 }

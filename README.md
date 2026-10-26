@@ -6,13 +6,15 @@ See [DESIGN.md](DESIGN.md) for the full design.
 
 ## Status
 
-M2: conversion, validation and format detection work. Next: standalone converters (`build`), then the Studio editor.
+M3: conversion, validation, format detection and standalone converters work. Next: the Studio editor.
 
 ```bash
 lmmtfy inspect input.csv                                   # what is this file?
 lmmtfy init input.csv -o acme.mapping.yaml                 # draft mapping to review and edit
 lmmtfy convert input.csv --mapping acme.mapping.yaml -o output.csv [--rejects path] [--report report.json] [--log-level warnings] [--strict]
 lmmtfy validate --mapping acme.mapping.yaml [--input input.csv]
+lmmtfy build --mapping acme.mapping.yaml --os windows -o acme-converter   # standalone converter for production
+acme-converter.exe input.csv output.csv
 ```
 
 Example mappings, with their inputs and expected outputs, live in [testdata/](testdata/).

@@ -26,13 +26,14 @@ all: check build
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
-runners: ## Cross-compile converter templates for every platform
+runners: ## Cross-compile converter templates for every platform (gzipped, to embed)
 	@for t in $(RUNNER_TARGETS); do \
 		os=$${t%/*}; arch=$${t#*/}; ext=; \
 		if [ "$$os" = windows ]; then ext=.exe; fi; \
 		echo "  runner  $$os/$$arch"; \
 		GOOS=$$os GOARCH=$$arch $(GO) build $(BUILD_FLAGS) \
 			-o $(RUNNER_DIR)/runner-$$os-$$arch$$ext ./cmd/runner || exit 1; \
+		gzip -9 -n -f $(RUNNER_DIR)/runner-$$os-$$arch$$ext || exit 1; \
 	done
 
 build: runners ## Build the lmmtfy CLI for this machine into dist/
@@ -62,11 +63,13 @@ fmt-check: ## Fail if any Go file is not formatted
 golden-update: ## Rewrite golden expected files from actual results
 	LMMTFY_UPDATE_GOLDEN=1 $(GO) test ./...
 
-smoke: build ## Run the built CLI and this machine's runner
+smoke: build ## Build a converter for this machine and check it converts like the CLI
 	./$(DIST)/lmmtfy version
-	@./$(RUNNER_DIR)/runner-$(HOST_OS)-$(HOST_ARCH) >/dev/null 2>&1; code=$$?; \
-		if [ $$code -ne 2 ]; then echo "runner exit code $$code, want 2"; exit 1; fi; \
-		echo "  runner  $(HOST_OS)/$(HOST_ARCH) starts and refuses without mapping: ok"
+	./$(DIST)/lmmtfy build --mapping testdata/acme-orders/mapping.yaml --os $(HOST_OS) --arch $(HOST_ARCH) -o $(DIST)/smoke-converter
+	./$(DIST)/smoke-converter --info
+	./$(DIST)/smoke-converter testdata/acme-orders/input.csv $(DIST)/smoke-output.csv --log-level none
+	cmp $(DIST)/smoke-output.csv testdata/acme-orders/output.csv
+	@echo "  converter $(HOST_OS)/$(HOST_ARCH) output matches the golden file: ok"
 
 check: fmt-check vet test ## Formatting, vet and tests
 

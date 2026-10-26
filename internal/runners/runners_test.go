@@ -18,6 +18,9 @@ func TestFileNameRoundTrip(t *testing.T) {
 }
 
 func TestParseFileNameRejects(t *testing.T) {
+	if got, ok := parseFileName("runner-linux-arm64.gz"); !ok || got != (Target{"linux", "arm64"}) {
+		t.Errorf("parseFileName(.gz) = %v, %v", got, ok)
+	}
 	for _, name := range []string{".gitkeep", "runner", "runner-linux", "runner--amd64", "other-linux-amd64"} {
 		if got, ok := parseFileName(name); ok {
 			t.Errorf("parseFileName(%q) = %v, true; want false", name, got)
