@@ -43,11 +43,12 @@ export function remove(m, index) {
   if (m.columns) delete m.columns[col.name]
 }
 
-export function move(m, index, delta) {
+// moveTo moves the column at from so that it ends up at index to.
+export function moveTo(m, from, to) {
   const cols = columns(m)
-  const to = index + delta
-  if (to < 0 || to >= cols.length) return
-  ;[cols[index], cols[to]] = [cols[to], cols[index]]
+  if (from === to || from < 0 || to < 0 || from >= cols.length || to >= cols.length) return
+  const [col] = cols.splice(from, 1)
+  cols.splice(to, 0, col)
 }
 
 // add appends a column. Without source it needs a default: "" (empty).

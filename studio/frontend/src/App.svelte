@@ -74,11 +74,16 @@
   })
   $effect(() => {
     if (screen !== 'edit' || !mapping) return
+    // Read everything the preview depends on here, synchronously: Svelte
+    // only re-runs an effect for what it reads before the first await or
+    // timeout. (csvPath read inside the timeout was missed: opening a sample
+    // file did not refresh the preview.)
     const snapshot = JSON.parse(JSON.stringify(mapping))
+    const path = csvPath
     const t = setTimeout(async () => {
       try {
-        if (csvPath) {
-          const res = await api.preview(csvPath, snapshot)
+        if (path) {
+          const res = await api.preview(path, snapshot)
           preview = res
           issues = res.issues ?? []
         } else {
@@ -141,8 +146,15 @@
   async function openSample() {
     const path = await api.chooseFile('Sample CSV file for the preview', 'csv')
     if (!path) return
-    csvPath = path
-    try { raw = await api.readRaw(path, JSON.parse(JSON.stringify(mapping.input))) } catch (e) { fail(e) }
+    try {
+      raw = await api.readRaw(path, JSON.parse(JSON.stringify(mapping.input)))
+      csvPath = path
+      message = null
+      // Detection only informs the column panel (detected types, examples):
+      // the mapping's own reading settings are kept.
+      api.open(path).then((o) => (detection = o.detection)).catch(() => {})
+      api.remember('csv', path).then(loadRecent)
+    } catch (e) { fail(e) }
   }
 
   async function save(as = false) {
@@ -181,7 +193,12 @@
       </span>
       {#if screen === 'edit'}
         <button class="link" onclick={() => (screen = 'read')} disabled={!csvPath}>← Reading settings</button>
-        {#if !csvPath}<button onclick={openSample}>Open sample CSV…</button>{/if}
+        {#if csvPath}
+          <span class="muted sample" title={csvPath}>sample: <span class="mono">{fileName(csvPath)}</span></span>
+          <button class="link" onclick={openSample}>Change…</button>
+        {:else}
+          <button onclick={openSample}>Open sample CSV…</button>
+        {/if}
       {/if}
       <span class="spacer"></span>
       {#if screen === 'edit'}
@@ -259,6 +276,7 @@
   .brand { font-weight: 700; font-size: 15px; color: var(--text); }
   .brand span { color: var(--accent); font-weight: 500; }
   .title { display: flex; gap: 8px; align-items: center; margin-left: 10px; }
+  .sample { margin-left: 8px; }
   .message { display: flex; justify-content: space-between; align-items: center; padding: 6px 14px; }
   .message.error { background: var(--error-soft); color: var(--error); }
   .message.ok { background: var(--soft); color: var(--ok); }
