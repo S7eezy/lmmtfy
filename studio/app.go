@@ -42,10 +42,13 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	return err != nil || answer != "Discard and quit" && answer != "Yes"
 }
 
+// File dialog filters. Patterns must be plain extensions ("*.yaml"): on
+// macOS each one becomes a file type, and an extension with a dot in it
+// ("*.target.yaml") has none, which makes the dialog abort the app.
 var filters = map[string][]runtime.FileFilter{
 	"csv":     {{DisplayName: "CSV files (*.csv, *.txt, *.tsv)", Pattern: "*.csv;*.txt;*.tsv"}, {DisplayName: "All files", Pattern: "*"}},
 	"mapping": {{DisplayName: "Mappings (*.yaml, *.yml)", Pattern: "*.yaml;*.yml"}, {DisplayName: "All files", Pattern: "*"}},
-	"target":  {{DisplayName: "Targets (*.target.yaml, *.yaml)", Pattern: "*.target.yaml;*.target.yml;*.yaml;*.yml"}, {DisplayName: "All files", Pattern: "*"}},
+	"target":  {{DisplayName: "Targets (*.target.yaml, *.yaml)", Pattern: "*.yaml;*.yml"}, {DisplayName: "All files", Pattern: "*"}},
 	"any":     {{DisplayName: "All files", Pattern: "*"}},
 }
 
