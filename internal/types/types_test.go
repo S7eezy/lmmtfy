@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 func s(v string) *config.Scalar { x := config.Scalar(v); return &x }

@@ -1,10 +1,10 @@
-module lmmtfy/studio
+module github.com/S7eezy/lmmtfy/studio
 
 go 1.27.1
 
 require (
+	github.com/S7eezy/lmmtfy v0.0.0
 	github.com/wailsapp/wails/v2 v2.16.0
-	lmmtfy v0.0.0
 )
 
 require (
@@ -109,6 +109,6 @@ require (
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 )
 
-replace lmmtfy => ../
+replace github.com/S7eezy/lmmtfy => ../
 
 tool github.com/wailsapp/wails/v2/cmd/wails

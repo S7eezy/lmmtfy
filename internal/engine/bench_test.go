@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 // benchInput is a 200k-row file shaped like the skip-row-rejects case:

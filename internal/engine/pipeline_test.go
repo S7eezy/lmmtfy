@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/golden"
-	"lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/golden"
+	"github.com/S7eezy/lmmtfy/internal/report"
 )
 
 type runResult struct {

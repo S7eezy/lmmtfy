@@ -57,7 +57,7 @@ A mapping references a target either by path or inline. A mapping with an inline
 ### Technology
 
 - **Go** (1.27+) for everything except the Studio frontend. Static binaries, trivial cross-compilation, streaming CSV, no runtime to install.
-- **Wails** for Studio: Go backend + web frontend (Svelte + TypeScript) in a native desktop window.
+- **Wails** for Studio: Go backend + web frontend (Svelte 5, plain JavaScript, Lucide icons) in a native desktop window.
 - **YAML** for configs (`github.com/goccy/go-yaml`, chosen for error messages with line/column positions).
 - `golang.org/x/text/encoding` for non-UTF-8 encodings.
 - Fixed-point decimals (`github.com/shopspring/decimal` or in-house) — never floats for decimal data.
@@ -80,22 +80,28 @@ Runner targets: `windows/amd64`, `linux/amd64`, `linux/arm64`, `darwin/arm64`, `
 
 ```
 lmmtfy/
-├── go.mod
-├── Makefile                build runners → embed → build CLI / Studio
+├── Makefile                build runners → embed → CLI, Studio, release archives
 ├── cmd/
 │   ├── lmmtfy/             CLI entry point
 │   └── runner/             standalone converter template
 ├── internal/
-│   ├── config/             schema structs, load, validate, resolve (inline target)
-│   ├── csvio/              streaming reader/writer, dialects, encodings
-│   ├── types/              per-type parse / validate / format
-│   ├── detect/             dialect and type detection
-│   ├── engine/             pipeline
-│   ├── report/             logging, reject file, summary
-│   ├── payload/            append / extract mapping in runner binaries
-│   └── runners/            embedded runner binaries (build output)
-├── studio/                 Wails app (Go bindings + frontend/)
+│   ├── config/             schemas, loading, validation, YAML formatting
+│   ├── csvio/              streaming CSV reader/writer, dialects, encodings
+│   ├── types/              per-type parse / check / format
+│   ├── detect/             encoding, dialect, layout and type detection
+│   ├── engine/             parallel conversion pipeline
+│   ├── report/             logs, run summary
+│   ├── app/                commands shared by the CLI and converters
+│   ├── build/              converter builds (embeds the templates)
+│   ├── payload/            payload slot, macOS re-signing
+│   ├── runners/            embedded converter templates (build output)
+│   ├── studio/             Studio logic, without UI
+│   ├── golden/             golden test harness
+│   ├── exitcode/, version/
+├── studio/                 Wails app (separate Go module) and its Svelte frontend
+├── tools/                  icon generator, release packager
 ├── testdata/               golden test cases
+├── docs/USER_GUIDE.md
 └── DESIGN.md
 ```
 
@@ -446,16 +452,17 @@ Tests build a real converter for every golden case and run it as a separate proc
 
 ### Flow
 
-1. **Home**: new mapping from a CSV file, or open a mapping.
-2. **Read the file**: detection pre-fills encoding, delimiter, quote, escape, header line, rows to skip, footer, comments, trim, null tokens, ragged rows and duplicate headers. The preview shows the first rows, marked as skipped, header, data or footer, and follows every change. "Detect again" resets to detection.
-3. **Map columns**:
-   - Output columns, in output order: name, type, source column (or none: filled with the default). Move up/down, delete, add. Source columns not used are listed and can be added back in one click.
-   - Details of the selected column: what detection saw (type, share of values, examples, notes), required, default, empty and missing behaviour (optional columns, with the omit warning), error strategy override, trim, type options (how values are read and written), value map.
-   - Live output preview of the first 100 rows, with rejected rows and messages in their own tabs. When the mapping is invalid, the problems replace the preview, the column carries a marker, and Save, Convert and Export are disabled.
-   - Settings: mapping name and description, where the target lives (in the mapping, in its own file, or an existing target file shared with other mappings), output file format, error strategy and thresholds, logging.
-4. **Save** (YAML, rules in output order, target inline or as a relative path), **Convert…** a whole file, **Export converter…** for any platform.
+1. **Home**: new mapping from a CSV file, open a mapping, recent files, or drop a file on the window.
+2. **Read the file**: detection pre-fills encoding, delimiter, quote, escape, header line, rows to skip, footer, comments, trim, null tokens, ragged rows and duplicate headers. The preview marks each row as skipped, header, data or footer, and follows every change.
+3. **Mapping & target** (new mappings only): name, description, target (defined in the mapping, stored in its own file, or an existing target file whose columns are matched to sources by name), output file format, error strategy, logging. Doing it before the columns means neither the name nor the target is forgotten.
+4. **Map columns**:
+   - One row per output column, read left to right: source column with its detected type and confidence (coloured), then output name and type. Rows are reordered by dragging (auto-scroll near the edges, arrow keys on the grip), filtered by name, deleted or added; unused source columns can be added back in one click. Built for hundreds of columns.
+   - Changing a type picks up the formats and separators detection found for it. A warning shows when the type does not match the data.
+   - The selected column's panel: detection (confidence bar, examples, rejected values, notes), how the source is read, value map, how the output is written, invalid values.
+   - Live output preview of the first 100 rows, selected column highlighted, with rejected rows and messages in their own tabs. When the mapping is invalid, the problems replace the preview and Save, Convert and Export are disabled.
+5. **Save** (`Ctrl/⌘+S`), **Convert** a whole file, **Export** converters for any platform. Closing the window with unsaved changes asks first.
 
-Opening a saved mapping goes straight to step 3; a sample CSV can then be opened for the preview.
+Opening a saved mapping goes straight to the columns; a sample CSV can then be opened for the preview.
 
 ### Architecture
 
@@ -494,6 +501,8 @@ Archive entries carry a fixed date, so their content alone decides their bytes.
 
 ## 10. Milestones
 
+All done; kept as the history of how lmmtfy was built.
+
 | # | Scope | Done when |
 |---|---|---|
 | M0 | Repo scaffold, Makefile, CI, test harness | `make test` green, runners cross-compile |
@@ -503,8 +512,9 @@ Archive entries carry a fixed date, so their content alone decides their bytes.
 | M4 | Studio: open, preview, editor, save, convert, export | End-to-end flow without touching YAML |
 | M5 | Hardening: performance, docs, portable packaging | Portable archives run without admin rights on all three OS |
 
-## 11. Open questions
+## 11. Ideas for later
 
-- Frontend framework for Studio: Svelte proposed.
-- Header matching: exact only, or optionally case-insensitive / whitespace-insensitive?
-- Expressions (concat, split, arithmetic) for v2: syntax to choose.
+- Header matching that ignores case and spacing, as an option.
+- Expressions: concatenate, split, compute columns.
+- Scientific notation as an output option for decimals.
+- Month names in other languages than English.

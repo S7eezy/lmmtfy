@@ -7,9 +7,9 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/studio"
-	"lmmtfy/internal/version"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/studio"
+	"github.com/S7eezy/lmmtfy/internal/version"
 )
 
 // App is bound to the frontend: each exported method can be called from

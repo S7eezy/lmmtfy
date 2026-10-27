@@ -10,7 +10,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 type intConv struct {

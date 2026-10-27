@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"lmmtfy/internal/app"
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/exitcode"
-	"lmmtfy/internal/payload"
-	"lmmtfy/internal/payload/slot"
-	"lmmtfy/internal/version"
+	"github.com/S7eezy/lmmtfy/internal/app"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/payload"
+	"github.com/S7eezy/lmmtfy/internal/payload/slot"
+	"github.com/S7eezy/lmmtfy/internal/version"
 )
 
 func main() {

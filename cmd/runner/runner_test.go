@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"lmmtfy/internal/app"
-	"lmmtfy/internal/build"
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/golden"
-	"lmmtfy/internal/payload"
-	"lmmtfy/internal/report"
-	"lmmtfy/internal/runners"
+	"github.com/S7eezy/lmmtfy/internal/app"
+	"github.com/S7eezy/lmmtfy/internal/build"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/golden"
+	"github.com/S7eezy/lmmtfy/internal/payload"
+	"github.com/S7eezy/lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/runners"
 )
 
 var host = runners.Target{OS: runtime.GOOS, Arch: runtime.GOARCH}

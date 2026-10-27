@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"lmmtfy/internal/app"
-	"lmmtfy/internal/build"
-	"lmmtfy/internal/detect"
-	"lmmtfy/internal/exitcode"
-	"lmmtfy/internal/runners"
-	"lmmtfy/internal/version"
+	"github.com/S7eezy/lmmtfy/internal/app"
+	"github.com/S7eezy/lmmtfy/internal/build"
+	"github.com/S7eezy/lmmtfy/internal/detect"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/runners"
+	"github.com/S7eezy/lmmtfy/internal/version"
 )
 
 const usageText = `lmmtfy — Let Me Map That For You

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"lmmtfy/internal/detect"
-	"lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/detect"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
 )
 
 // Inspect detects the format of an input file and prints it, as text or

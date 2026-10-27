@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 // Converter turns a source cell into its output representation: parse with

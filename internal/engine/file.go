@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/report"
 )
 
 // FileJob is one conversion, on files.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 func decimalConverters(t testing.TB) []*decConv {

@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/exitcode"
-	"lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/report"
 )
 
 // ConvertRequest is one conversion as asked on the command line.

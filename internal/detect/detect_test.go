@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/golden"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/golden"
 )
 
 // Every golden case has a hand-written mapping: detection must find the

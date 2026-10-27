@@ -8,8 +8,8 @@ import (
 	"slices"
 	"sync"
 
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/types"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/types"
 )
 
 // The pipeline has three stages:

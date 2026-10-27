@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/engine"
 )
 
 // Options tunes detection.

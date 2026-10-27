@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/types"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/types"
 )
 
 // Plan is a compiled mapping, ready to convert any number of files.

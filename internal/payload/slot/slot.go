@@ -2,7 +2,7 @@
 // runner imports it: any binary importing it carries the 1 MiB slot.
 package slot
 
-import "lmmtfy/internal/payload"
+import "github.com/S7eezy/lmmtfy/internal/payload"
 
 // data is initialized, so the compiler stores all of it in the executable
 // file, where `lmmtfy build` can overwrite it. This literal is the only

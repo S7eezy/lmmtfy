@@ -12,8 +12,8 @@ import (
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/engine"
 )
 
 // detectFooter counts trailing records that do not fit the columns: totals,

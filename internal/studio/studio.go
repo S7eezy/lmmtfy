@@ -20,14 +20,14 @@ import (
 	"strings"
 	"time"
 
-	"lmmtfy/internal/app"
-	"lmmtfy/internal/build"
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/detect"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/report"
-	"lmmtfy/internal/runners"
+	"github.com/S7eezy/lmmtfy/internal/app"
+	"github.com/S7eezy/lmmtfy/internal/build"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/detect"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/runners"
 )
 
 // PreviewRows is the number of rows shown in previews.

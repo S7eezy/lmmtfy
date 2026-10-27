@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/types"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/types"
 )
 
 // Column is the proposal for one source column.

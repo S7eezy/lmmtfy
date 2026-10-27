@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/report"
-	"lmmtfy/internal/version"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/version"
 )
 
 // FileError means the input was rejected as a whole: fail_file strategy,

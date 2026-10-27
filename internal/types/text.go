@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 type stringConv struct {

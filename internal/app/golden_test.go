@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/detect"
-	"lmmtfy/internal/golden"
-	"lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/detect"
+	"github.com/S7eezy/lmmtfy/internal/golden"
+	"github.com/S7eezy/lmmtfy/internal/report"
 )
 
 // TestGolden runs every case under testdata/ through the same code path as

@@ -11,10 +11,10 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/detect"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/detect"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
 )
 
 // InitRequest is `lmmtfy init` as asked on the command line.

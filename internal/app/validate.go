@@ -8,9 +8,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"lmmtfy/internal/config"
-	"lmmtfy/internal/engine"
-	"lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
 )
 
 // Validate checks a mapping and, when input is not empty, the header of an

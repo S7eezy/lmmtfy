@@ -1,4 +1,4 @@
-module lmmtfy
+module github.com/S7eezy/lmmtfy
 
 go 1.27.1
 

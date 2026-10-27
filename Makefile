@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 # Static, reproducible binaries: no cgo, no local paths, stripped, version stamped.
 export CGO_ENABLED := 0
-BUILD_FLAGS := -trimpath -ldflags "-s -w -X lmmtfy/internal/version.Version=$(VERSION)"
+BUILD_FLAGS := -trimpath -ldflags "-s -w -X github.com/S7eezy/lmmtfy/internal/version.Version=$(VERSION)"
 
 # Platforms converters can be built for.
 # Keep in sync with runners.Supported (checked by internal/runners tests).
@@ -73,7 +73,7 @@ smoke: build ## Build a converter for this machine and check it converts like th
 
 # Studio is a separate Go module (studio/) needing Node.js and, on macOS,
 # Xcode command line tools; the Wails CLI is a Go tool dependency of it.
-STUDIO_FLAGS := -clean -trimpath -ldflags "-s -w -X lmmtfy/internal/version.Version=$(VERSION)"
+STUDIO_FLAGS := -clean -trimpath -ldflags "-s -w -X github.com/S7eezy/lmmtfy/internal/version.Version=$(VERSION)"
 ifeq ($(HOST_OS),linux)
 # Current distributions ship WebKitGTK 4.1.
 STUDIO_FLAGS += -tags webkit2_41

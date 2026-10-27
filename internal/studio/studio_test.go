@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/config"
 )
 
 const acme = "../../testdata/acme-orders/input.csv"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"lmmtfy/internal/csvio"
-	"lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/report"
 )
 
 type resolution struct {

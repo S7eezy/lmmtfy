@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
 )
 
 // NewFlagSet returns a flag set printing usage ("Usage: <usage>") and

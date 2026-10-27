@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"lmmtfy/internal/exitcode"
-	"lmmtfy/internal/runners"
+	"github.com/S7eezy/lmmtfy/internal/exitcode"
+	"github.com/S7eezy/lmmtfy/internal/runners"
 )
 
 func TestRun(t *testing.T) {
