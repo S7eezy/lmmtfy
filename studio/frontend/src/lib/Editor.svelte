@@ -7,11 +7,15 @@
   // dragging, a filter finds columns, and only the selected row carries the
   // heavy source picker (one <select> of every source column per row would
   // mean tens of thousands of DOM nodes).
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
   import ColumnDetails from './ColumnDetails.svelte'
+  import ConfidenceBadge from './ConfidenceBadge.svelte'
+  import TypeIcon from './TypeIcon.svelte'
   import * as M from './mapping.js'
 
-  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], hasInput = true } = $props()
+  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], samplePath = '', onsample } = $props()
+  const hasInput = $derived(!!samplePath)
 
   let selected = $state(0)
   let tab = $state('output')
@@ -41,9 +45,20 @@
     return detection.columns.find((c) => (r.source_index ? c.index === r.source_index : c.name === r.source)) ?? null
   }
   function sourceOf(key) { return sources.find((s) => s.key === key) ?? null }
+  // A type that does not match what the data looks like deserves a warning.
+  function mismatch(col, d) {
+    if (!d || col.type === 'string') return ''
+    if (d.type === 'string') {
+      return d.near_type === col.type ? `Only ${Math.round(d.near_confidence * 100)}% of sampled values read as ${col.type}` : `The sampled values look like text, not ${col.type}`
+    }
+    if (d.type === col.type || (d.type === 'integer' && col.type === 'decimal') || (d.type === 'date' && col.type === 'datetime')) return ''
+    return `The sampled values look like ${d.type}, not ${col.type}`
+  }
+  // The output preview highlights the selected column.
+  const highlight = $derived(current && preview?.header ? preview.header.indexOf(current.name) : -1)
   function sourceLabel(r) {
     const key = M.sourceKey(r)
-    if (!key) return '— none (default value) —'
+    if (!key) return '— none: default value —'
     return sourceOf(key) ? key : `${key} (not in this file)`
   }
 
@@ -145,49 +160,66 @@
 <div class="layout" class:dragging={!!drag}>
   <section class="panel columns">
     <div class="head row">
-      <strong>Output columns</strong>
+      <span class="title"><Columns3 size={16} /> Columns</span>
       <span class="badge">{filter ? `${visible.length} of ${cols.length}` : cols.length}</span>
-      {#if errors.length}<span class="badge error">{errors.length} errors</span>{/if}
-      <input class="filter" type="search" bind:value={filter} placeholder="Filter columns…" />
+      {#if errors.length}<span class="badge error">{errors.length} {errors.length === 1 ? 'error' : 'errors'}</span>{/if}
+      <label class="search"><Search size={14} /><input type="search" bind:value={filter} placeholder="Filter columns…" /></label>
       <span class="spacer"></span>
-      <button onclick={() => addFrom(null)}>+ Add column</button>
+      <button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>
     </div>
     <div class="scroll list" bind:this={listEl}>
       <table>
-        <thead><tr><th class="grip-col"></th><th class="num">#</th><th>Output name</th><th>Type</th><th>From source column</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th class="grip-col"></th><th class="num">#</th>
+            <th class="side-in">Source column <span class="muted">· detected</span></th>
+            <th class="arrow"></th>
+            <th class="name-col">Output name</th><th class="type-col">Output type</th><th></th>
+          </tr>
+        </thead>
         <tbody bind:this={bodyEl}>
           {#each visible as { col, i } (col)}
             {@const r = mapping.columns?.[col.name]}
             {@const problems = byColumn.get(col.name) ?? []}
+            {@const d = detectedFor(r)}
+            {@const warn = mismatch(col, d)}
             <tr class="{dropClass(i)}" class:selected={i === selected} class:moving={drag?.from === i} onclick={() => (selected = i)}>
               <td class="grip-col">
                 <button class="grip" class:disabled={!!filter} tabindex={filter ? -1 : 0}
                   title={filter ? 'Clear the filter to reorder' : 'Drag to reorder (or arrow keys)'} aria-label="Reorder {col.name}"
                   onpointerdown={(e) => startDrag(e, i)} onpointermove={moveDrag} onpointerup={endDrag} onpointercancel={endDrag}
-                  onkeydown={(e) => gripKey(e, i)}>⠿</button>
+                  onkeydown={(e) => gripKey(e, i)}><GripVertical size={15} /></button>
               </td>
               <td class="num muted">{i + 1}</td>
+              <td class="side-in">
+                <div class="source-cell">
+                  {#if i === selected}
+                    <select value={M.sourceKey(r)} onchange={(e) => M.setSource(mapping, col.name, sourceOf(e.target.value))}>
+                      <option value="">— none: default value —</option>
+                      {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
+                      {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)} (not in this file)</option>{/if}
+                    </select>
+                  {:else}
+                    <span class="source" class:none={!M.sourceKey(r)}>{sourceLabel(r)}</span>
+                  {/if}
+                  {#if d}<ConfidenceBadge detected={d} compact />{/if}
+                </div>
+              </td>
+              <td class="arrow"><ArrowRight size={14} /></td>
               <td><input value={col.name} onchange={(e) => { if (!M.rename(mapping, i, e.target.value.trim())) e.target.value = col.name }} /></td>
               <td>
-                <select value={col.type} onchange={(e) => M.setType(mapping, i, e.target.value)}>
-                  {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
-                </select>
-              </td>
-              <td>
-                {#if i === selected}
-                  <select value={M.sourceKey(r)} onchange={(e) => M.setSource(mapping, col.name, sourceOf(e.target.value))}>
-                    <option value="">— none (default value) —</option>
-                    {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
-                    {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)} (not in this file)</option>{/if}
+                <div class="type-cell">
+                  <TypeIcon type={col.type} />
+                  <select value={col.type} onchange={(e) => M.setType(mapping, i, e.target.value, d)}>
+                    {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
                   </select>
-                {:else}
-                  <span class="source" class:none={!M.sourceKey(r)}>{sourceLabel(r)}</span>
-                {/if}
+                  {#if warn}<span class="mismatch" title={warn}><TriangleAlert size={14} /></span>{/if}
+                </div>
               </td>
               <td class="status">
-                {#if problems.some((p) => p.severity === 'error')}<span class="badge error" title={problems.map((p) => p.message).join('\n')}>!</span>
-                {:else if problems.length}<span class="badge warn" title={problems.map((p) => p.message).join('\n')}>?</span>{/if}
-                <button class="icon" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column">🗑</button>
+                {#if problems.some((p) => p.severity === 'error')}<span class="state error" title={problems.map((p) => p.message).join('\n')}><CircleAlert size={15} /></span>
+                {:else if problems.length}<span class="state warn" title={problems.map((p) => p.message).join('\n')}><TriangleAlert size={15} /></span>{/if}
+                <button class="icon delete" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column"><Trash2 size={14} /></button>
               </td>
             </tr>
           {/each}
@@ -196,8 +228,8 @@
       {#if filter && visible.length === 0}<p class="muted pad">No column matches “{filter}”.</p>{/if}
       {#if unused.length && !filter}
         <div class="unused">
-          <span class="muted">Not in the output (click to add):</span>
-          {#each unused as s}<button class="chip" onclick={() => addFrom(s)}>+ {s.label}</button>{/each}
+          <span class="muted"><Ban size={13} /> {unused.length} source {unused.length === 1 ? 'column is' : 'columns are'} not in the output — click to add:</span>
+          {#each unused as s}<button class="chip" onclick={() => addFrom(s)}><Plus size={12} /> {s.label}</button>{/each}
         </div>
       {/if}
       {#each general as i}<div class="issue {i.severity}">{i.path ? i.path + ': ' : ''}{i.message}</div>{/each}
@@ -223,24 +255,31 @@
 
   <section class="panel bottom">
     <div class="tabs row">
-      <button class:active={tab === 'output'} onclick={() => (tab = 'output')}>Output preview {#if preview?.rows}<span class="badge">{preview.rows.length}</span>{/if}</button>
-      <button class:active={tab === 'rejected'} onclick={() => (tab = 'rejected')}>Rejected rows {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
-      <button class:active={tab === 'events'} onclick={() => (tab = 'events')}>Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
+      <button class:active={tab === 'output'} onclick={() => (tab = 'output')}><Table size={14} /> Output preview {#if preview?.rows}<span class="badge">{preview.rows.length}</span>{/if}</button>
+      <button class:active={tab === 'rejected'} onclick={() => (tab = 'rejected')}><Ban size={14} /> Rejected rows {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
+      <button class:active={tab === 'events'} onclick={() => (tab = 'events')}><MessageSquareWarning size={14} /> Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
       <span class="spacer"></span>
-      {#if preview?.failure}<span class="issue error">Conversion fails: {preview.failure}</span>{/if}
-      {#if !hasInput}<span class="muted">Open a sample CSV file to see a preview.</span>{/if}
+      {#if hasInput}
+        <span class="sample" title={samplePath}><FileSpreadsheet size={14} /> <span class="mono">{samplePath.split(/[\\/]/).pop()}</span></span>
+        <button class="link" onclick={onsample}>Change sample</button>
+      {:else}
+        <button class="primary" onclick={onsample}><FileSpreadsheet size={14} /> Open a sample CSV to preview</button>
+      {/if}
     </div>
+    {#if preview?.failure && !errors.length}
+      <div class="failure"><CircleAlert size={15} /> <span><strong>The preview conversion fails:</strong> {preview.failure}</span></div>
+    {/if}
     <div class="tabbody">
       {#if errors.length}
         <div class="pad">{#each errors as i}<div class="issue error">{i.path}: {i.message}</div>{/each}</div>
       {:else if tab === 'output'}
-        <DataTable header={preview?.header} rows={preview?.rows ?? []} empty="No output rows" />
+        <DataTable header={preview?.header} rows={preview?.rows ?? []} empty="No output rows" {highlight} />
       {:else if tab === 'rejected'}
         <DataTable header={preview?.rejected?.[0]} rows={preview?.rejected?.slice(1) ?? []} rowClass={() => 'rejected'} empty="No rejected rows" />
       {:else}
         <div class="pad">
           {#each preview?.events ?? [] as e}
-            <div class="issue {e.level === 'error' ? 'error' : 'warning'}">{#if e.line}line {e.line}{/if}{#if e.column}, {e.column}{/if}{#if e.line || e.column}: {/if}{e.message}</div>
+            <div class="issue {e.level === 'error' ? 'error' : 'warning'}">{[e.line && `line ${e.line}`, e.column].filter(Boolean).join(' · ')}{e.line || e.column ? ': ' : ''}{e.message}</div>
           {:else}<p class="muted">No messages.</p>{/each}
         </div>
       {/if}
@@ -249,11 +288,13 @@
 </div>
 
 <style>
-  .layout { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 1fr 260px; gap: 12px; height: 100%; min-height: 0; }
+  .layout { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 1fr 260px; gap: 12px; height: 100%; min-height: 0; }
   .columns { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   .head { padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .list { flex: 1; min-height: 0; padding-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; }
+  /* Fixed layout: declared widths win over content, the source column
+     takes what is left and truncates long names. */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 600; padding: 6px 8px; position: sticky; top: 0; background: var(--panel); }
   td { padding: 4px 6px; border-top: 1px solid var(--line); }
   td input, td select { width: 100%; }
@@ -268,9 +309,38 @@
   tr.drop-above td { box-shadow: inset 0 3px 0 var(--accent); }
   tr.drop-below td { box-shadow: inset 0 -3px 0 var(--accent); }
   .num { width: 36px; text-align: right; font-size: 11px; }
-  .source { display: block; padding: 4px 8px; border: 1px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; }
+  .head button { display: inline-flex; gap: 5px; align-items: center; }
+  .search { flex-direction: row; align-items: center; gap: 0; margin-left: 8px; position: relative; color: var(--muted); }
+  .search :global(svg) { position: absolute; left: 8px; }
+  .search input { padding-left: 27px; width: 190px; }
+  th.side-in, td.side-in { background: color-mix(in srgb, var(--soft) 45%, transparent); }
+  tr.selected td.side-in { background: var(--soft); }
+  .source-cell { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .source-cell select { flex: 1; min-width: 0; }
+  .source-cell .source { flex: 1; min-width: 0; }
+  .source-cell :global(.conf) { flex-shrink: 0; }
+  .arrow { width: 22px; color: var(--muted); text-align: center; padding: 0; }
+  .type-cell { display: flex; align-items: center; gap: 5px; }
+  .name-col { width: 26%; }
+  .type-col { width: 150px; }
+  th:last-child { width: 74px; }
+  .type-cell select { flex: 1; }
+  .mismatch { color: var(--fair); display: inline-flex; }
+  .state { display: inline-flex; vertical-align: middle; margin-right: 4px; }
+  .state.error { color: var(--error); }
+  .state.warn { color: var(--warn); }
+  .delete { color: var(--muted); }
+  .delete:hover { color: var(--error); }
+  .unused .muted { display: inline-flex; gap: 5px; align-items: center; }
+  .chip { display: inline-flex; gap: 3px; align-items: center; }
+  .tabs button { display: inline-flex; gap: 5px; align-items: center; }
+  .failure { display: flex; gap: 7px; align-items: flex-start; padding: 7px 12px; background: var(--error-soft); color: var(--error); font-size: 12px; border-bottom: 1px solid var(--line); }
+  .failure strong { color: inherit; }
+  .tabs .sample { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); max-width: 240px; overflow: hidden; white-space: nowrap; }
+  .tabs button.primary { background: var(--accent); color: var(--accent-text); }
+  .source { display: block; padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .source.none { color: var(--muted); font-style: italic; }
-  .filter { width: 180px; margin-left: 8px; }
   .ghost { position: fixed; z-index: 20; pointer-events: none; background: var(--accent); color: var(--accent-text); padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); white-space: nowrap; }
   .status { width: 70px; white-space: nowrap; text-align: right; }
   .unused { padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

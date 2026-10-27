@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -15,10 +16,31 @@ import (
 // JavaScript and returns a promise. Methods only forward to package studio,
 // plus native file dialogs.
 type App struct {
-	ctx context.Context
+	ctx   context.Context
+	dirty atomic.Bool // the editor has unsaved changes
 }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+
+// SetDirty is called by the editor whenever its unsaved state changes.
+func (a *App) SetDirty(dirty bool) { a.dirty.Store(dirty) }
+
+// beforeClose asks before quitting with unsaved changes. Returning true
+// keeps the window open.
+func (a *App) beforeClose(ctx context.Context) bool {
+	if !a.dirty.Load() {
+		return false
+	}
+	answer, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+		Type:          runtime.QuestionDialog,
+		Title:         "Unsaved changes",
+		Message:       "The mapping has unsaved changes. Quit and discard them?",
+		Buttons:       []string{"Discard and quit", "Cancel"},
+		DefaultButton: "Cancel",
+		CancelButton:  "Cancel",
+	})
+	return err != nil || answer != "Discard and quit" && answer != "Yes"
+}
 
 var filters = map[string][]runtime.FileFilter{
 	"csv":     {{DisplayName: "CSV files (*.csv, *.txt, *.tsv)", Pattern: "*.csv;*.txt;*.tsv"}, {DisplayName: "All files", Pattern: "*"}},

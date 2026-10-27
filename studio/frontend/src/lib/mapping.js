@@ -79,7 +79,11 @@ export function setSource(m, name, source) {
   else r.source = source.name
 }
 
-export function setType(m, index, type) {
+// setType changes a column's type. Options of the old type are cleared;
+// when detection read the source as the new type (or almost), its reading
+// options (formats, separators, boolean values) are filled in, so the column
+// converts right away.
+export function setType(m, index, type, detected = null) {
   const col = columns(m)[index]
   if (col.type === type) return
   col.type = type
@@ -87,6 +91,19 @@ export function setType(m, index, type) {
   const r = m.columns?.[col.name]
   if (r) for (const k of RULE_TYPE_OPTIONS) delete r[k]
   if (col.default !== undefined) delete col.default
+  if (!r || !detected) return
+
+  let read = null
+  if (detected.type === type) {
+    read = { formats: detected.formats, decimal_sep: detected.decimal_sep, thousands_sep: detected.thousands_sep,
+      true_values: detected.true_values, false_values: detected.false_values }
+  } else if (detected.near_type === type) {
+    read = { formats: detected.near_formats, decimal_sep: detected.near_decimal_sep, thousands_sep: detected.near_thousands_sep }
+  }
+  for (const [k, v] of Object.entries(read ?? {})) {
+    if (v && (!Array.isArray(v) || v.length)) r[k] = v
+  }
+  if (type === 'decimal' && detected.type === 'decimal' && detected.scale != null) col.scale = detected.scale
 }
 
 // sources lists the source columns of the input: header names (trimmed,

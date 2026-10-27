@@ -33,4 +33,6 @@ export function Remember(arg1:string,arg2:string):Promise<void>;
 
 export function SaveMapping(arg1:config.Mapping,arg2:string,arg3:string):Promise<Array<studio.Issue>>;
 
+export function SetDirty(arg1:boolean):Promise<void>;
+
 export function Version():Promise<string>;

@@ -42,10 +42,11 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup:   a.startup,
-		Bind:        []any{a},
-		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
-		Windows:     win,
+		OnStartup:     a.startup,
+		OnBeforeClose: a.beforeClose,
+		Bind:          []any{a},
+		DragAndDrop:   &options.DragAndDrop{EnableFileDrop: true},
+		Windows:       win,
 	})
 	if err != nil {
 		log.Fatal(err)

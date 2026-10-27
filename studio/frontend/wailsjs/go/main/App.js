@@ -62,6 +62,10 @@ export function SaveMapping(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveMapping'](arg1, arg2, arg3);
 }
 
+export function SetDirty(arg1) {
+  return window['go']['main']['App']['SetDirty'](arg1);
+}
+
 export function Version() {
   return window['go']['main']['App']['Version']();
 }

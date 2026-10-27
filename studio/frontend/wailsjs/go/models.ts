@@ -363,6 +363,11 @@ export namespace detect {
 	    true_values?: string[];
 	    false_values?: string[];
 	    scale?: number;
+	    near_type?: string;
+	    near_confidence?: number;
+	    near_formats?: string[];
+	    near_decimal_sep?: string;
+	    near_thousands_sep?: string;
 	    max_length: number;
 	    null_tokens?: string[];
 	    examples?: string[];
@@ -388,6 +393,11 @@ export namespace detect {
 	        this.true_values = source["true_values"];
 	        this.false_values = source["false_values"];
 	        this.scale = source["scale"];
+	        this.near_type = source["near_type"];
+	        this.near_confidence = source["near_confidence"];
+	        this.near_formats = source["near_formats"];
+	        this.near_decimal_sep = source["near_decimal_sep"];
+	        this.near_thousands_sep = source["near_thousands_sep"];
 	        this.max_length = source["max_length"];
 	        this.null_tokens = source["null_tokens"];
 	        this.examples = source["examples"];

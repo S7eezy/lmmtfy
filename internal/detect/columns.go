@@ -31,6 +31,15 @@ type Column struct {
 	// Scale is the largest number of decimals seen, for decimal columns.
 	Scale *int `json:"scale,omitempty"`
 
+	// For text columns that almost have a type: that type and the share of
+	// values it accepts ("date", 0.8).
+	NearType       string  `json:"near_type,omitempty"`
+	NearConfidence float64 `json:"near_confidence,omitempty"`
+	// How to read the column as NearType, for editors switching to it.
+	NearFormats      []string `json:"near_formats,omitempty"`
+	NearDecimalSep   string   `json:"near_decimal_sep,omitempty"`
+	NearThousandsSep string   `json:"near_thousands_sep,omitempty"`
+
 	MaxLength  int      `json:"max_length"` // longest value, in characters
 	NullTokens []string `json:"null_tokens,omitempty"`
 	Examples   []string `json:"examples,omitempty"`
@@ -149,7 +158,7 @@ func inferColumn(all []string, opts Options) Column {
 		if leadingZeros(values) {
 			c.Notes = append(c.Notes, "numbers with leading zeros: kept as text (codes, identifiers)")
 		}
-		if note := nearMiss(values, opts); note != "" {
+		if note := nearMiss(&c, values); note != "" {
 			c.Notes = append(c.Notes, note)
 		}
 		return c
@@ -202,8 +211,9 @@ func inferColumn(all []string, opts Options) Column {
 
 // nearMiss explains a text column that is almost typed ("80% of values read
 // as date DD/MM/YYYY; rejected: 31/02/2026"), so the user can fix the data
-// or choose the type. Only the first values are tried, to stay fast.
-func nearMiss(values []string, opts Options) string {
+// or choose the type. It also sets c.NearType and c.NearConfidence. Only a
+// spread sample of values is tried, to stay fast.
+func nearMiss(c *Column, values []string) string {
 	values = spread(values, 100)
 	best, bestOK, bestFailing := candidate{priority: 1 << 30}, -1, []string(nil)
 	for _, cand := range candidates(values) {
@@ -215,6 +225,11 @@ func nearMiss(values []string, opts Options) string {
 	if bestOK <= 0 {
 		return ""
 	}
+	c.NearType = best.col.Type
+	c.NearConfidence = float64(bestOK) / float64(len(values))
+	c.NearFormats = best.rule.Formats
+	c.NearDecimalSep = string(best.rule.DecimalSep)
+	c.NearThousandsSep = string(best.rule.ThousandsSep)
 	desc := best.col.Type
 	if len(best.rule.Formats) > 0 {
 		desc += " " + best.rule.Formats[0]

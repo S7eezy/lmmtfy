@@ -176,6 +176,9 @@ func TestNearMissNote(t *testing.T) {
 	if msg := expectNote(c, "67% of values read as date DD/MM/YYYY; rejected: 31/02/2026"); msg != "" {
 		t.Error(msg)
 	}
+	if c.NearType != "date" || c.NearConfidence < 0.66 || c.NearConfidence > 0.67 || len(c.NearFormats) != 1 || c.NearFormats[0] != "DD/MM/YYYY" {
+		t.Errorf("near = %s %.2f %q", c.NearType, c.NearConfidence, c.NearFormats)
+	}
 }
 
 func TestNoHeader(t *testing.T) {
