@@ -11,7 +11,7 @@
   // through bindings, and previews are refreshed shortly after each change.
   // targetMode says where the target lives: "file" (linked, locked), "new"
   // (written to its own file on the next save) or "inline".
-  import { FilePlus2, FolderOpen, Settings2, Play, Package, Save, FileSpreadsheet, FileCog, Clock, Upload, Lightbulb, Target, ArrowLeft, Sheet, SquareDashed, Workflow } from '@lucide/svelte'
+  import { FilePlus2, Settings2, Play, Package, Save, FileCog, Upload, Target, ArrowLeft, Sheet, SquareDashed } from '@lucide/svelte'
   import * as api from './lib/api.js'
   import * as M from './lib/mapping.js'
   import { toast } from './lib/toast.svelte.js'
@@ -27,6 +27,7 @@
   import ConvertDialog from './lib/ConvertDialog.svelte'
   import ExportDialog from './lib/ExportDialog.svelte'
   import Modal from './lib/Modal.svelte'
+  import Home from './lib/Home.svelte'
 
   const STEPS = ['read', 'target', 'setup', 'edit']
   let screen = $state('home') // home | read | target | setup | edit | tedit
@@ -80,7 +81,6 @@
   const fileName = (p) => p.split(/[\\/]/).pop()
   const dirOf = (p) => p.replace(/[^\\/]+$/, '')
   const slug = (s) => M.targetName(s || 'target').replaceAll('_', '-')
-  const recentMappings = $derived(recent.filter((r) => r.kind !== 'target').slice(0, 8))
   const recentTargets = $derived(recent.filter((r) => r.kind === 'target'))
 
   api.version().then((v) => (version = v))
@@ -447,61 +447,8 @@
 
   <main>
     {#if screen === 'home'}
-      <div class="home">
-        <img class="logo" src="/icon.png" alt="" width="72" height="72" />
-        <h1>Let Me Map That For You</h1>
-        <p class="muted lead">A <strong>target</strong> is the format your software expects. A <strong>mapping</strong> says how one messy source becomes that target. Convert files here, from the command line, or with a standalone converter.</p>
-        <div class="groups">
-          <section class="group">
-            <h2><Workflow size={17} /> Mappings</h2>
-            <button class="card" onclick={() => openCSV()}>
-              <span class="card-icon"><FilePlus2 size={20} /></span>
-              <span><strong>New mapping from a CSV file</strong><span class="desc">Read the file, choose its target, map its columns.</span></span>
-            </button>
-            <button class="card" onclick={() => openMapping()}>
-              <span class="card-icon"><FolderOpen size={20} /></span>
-              <span><strong>Open a mapping</strong><span class="desc">Edit it, convert files, export converters.</span></span>
-            </button>
-            {#if recentMappings.length}
-              <div class="recent">
-                <h3><Clock size={13} /> Recent</h3>
-                {#each recentMappings as r}
-                  <button class="link item" title={r.path} onclick={() => (r.kind === 'mapping' ? openMapping(r.path) : openCSV(r.path))}>
-                    {#if r.kind === 'mapping'}<FileCog size={15} />{:else}<FileSpreadsheet size={15} />{/if}
-                    <span class="name">{fileName(r.path)}</span>
-                    <span class="muted mono dir">{r.path.slice(0, -fileName(r.path).length)}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </section>
-          <section class="group">
-            <h2><Target size={17} /> Targets</h2>
-            <button class="card" onclick={() => (dialog = 'newtarget')}>
-              <span class="card-icon"><FilePlus2 size={20} /></span>
-              <span><strong>New target</strong><span class="desc">From an example of the expected file, or blank.</span></span>
-            </button>
-            <button class="card" onclick={() => openTarget()}>
-              <span class="card-icon"><FolderOpen size={20} /></span>
-              <span><strong>Open a target</strong><span class="desc">Change its columns or file format, or map a file onto it.</span></span>
-            </button>
-            {#if recentTargets.length}
-              <div class="recent">
-                <h3><Clock size={13} /> Recent</h3>
-                {#each recentTargets.slice(0, 8) as r}
-                  <button class="link item" title={r.path} onclick={() => openTarget(r.path)}>
-                    <Target size={15} />
-                    <span class="name">{fileName(r.path)}</span>
-                    <span class="muted mono dir">{r.path.slice(0, -fileName(r.path).length)}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-          </section>
-        </div>
-        <p class="muted drop-hint"><Upload size={14} /> or drop a CSV file, a mapping or a target anywhere on this window</p>
-        <p class="muted small"><Lightbulb size={12} /> Tip: <kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>S</kbd> saves. Version {version}</p>
-      </div>
+      <Home {recent} {version} onnewmapping={() => openCSV()} onopenmapping={openMapping} onopencsv={openCSV}
+        onnewtarget={() => (dialog = 'newtarget')} onopentarget={openTarget} />
     {:else if screen === 'read' && mapping}
       <ReadStep bind:input={mapping.input} {raw} path={csvPath} notes={detection?.notes ?? []} onredetect={redetect}
         continueLabel={reached >= 3 ? 'Back to the columns' : 'Next: target'} oncontinue={() => go(reached >= 3 ? 'edit' : 'target')} />
@@ -577,28 +524,6 @@
   .unsaved { color: var(--warn); font-size: 12px; }
   .divider { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
   main { flex: 1; min-height: 0; padding: 12px; }
-  .home { max-width: 900px; margin: 4vh auto 0; text-align: center; overflow: auto; max-height: 100%; }
-  .logo { border-radius: 16px; }
-  .home h1 { font-size: 26px; margin: 10px 0 6px; }
-  .lead { max-width: 640px; margin: 0 auto; }
-  .lead strong { color: var(--text); }
-  .groups { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin: 26px 0 12px; text-align: left; }
-  .group { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .group h2 { display: flex; gap: 7px; align-items: center; font-size: 15px; margin: 0 0 2px; color: var(--text); }
-  .group h2 :global(svg) { color: var(--accent); }
-  .card { display: flex; gap: 12px; align-items: center; text-align: left; padding: 14px 16px; border-radius: 12px; transition: transform 0.12s, box-shadow 0.12s; }
-  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
-  .card-icon { display: inline-flex; width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; align-items: center; justify-content: center; background: var(--soft); color: var(--accent); }
-  .card strong { font-size: 14px; display: block; }
-  .card .desc { color: var(--muted); font-size: 12px; }
-  .drop-hint { display: inline-flex; gap: 6px; align-items: center; }
-  .small { font-size: 11px; display: inline-flex; gap: 4px; align-items: center; margin-top: 16px; }
-  .recent { padding: 0 4px; }
-  .recent h3 { display: flex; gap: 5px; align-items: center; margin: 6px 0 4px; }
-  .item { display: flex; gap: 8px; align-items: center; width: 100%; padding: 4px 2px; color: var(--text); text-align: left; }
-  .item :global(svg) { color: var(--accent); flex-shrink: 0; }
-  .item .name { font-weight: 600; white-space: nowrap; }
-  .item .dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; flex: 1; text-align: left; }
   .starts { display: grid; gap: 8px; margin: 8px 0 4px; }
   .starts :global(svg) { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
   .dropzone { position: fixed; inset: 10px; border: 3px dashed var(--accent); border-radius: 16px; background: color-mix(in srgb, var(--bg) 88%, transparent); display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: var(--accent); font-size: 16px; font-weight: 600; z-index: 25; pointer-events: none; }
