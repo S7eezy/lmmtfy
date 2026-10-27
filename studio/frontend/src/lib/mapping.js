@@ -67,8 +67,10 @@ function sourceRule(source) {
 }
 
 // setSource points a column at a source column, or at none (added column).
-export function setSource(m, name, source) {
+// With what detection found in the new source, the rule reads it right away.
+export function setSource(m, name, source, detected = null) {
   const r = (m.columns[name] ??= {})
+  const was = sourceKey(r)
   delete r.source
   delete r.source_index
   if (!source) {
@@ -77,6 +79,8 @@ export function setSource(m, name, source) {
   }
   if (source.index) r.source_index = source.index
   else r.source = source.name
+  const col = columns(m).find((c) => c.name === name)
+  if (col && source.key !== was) readAs(r, col.type, detected)
 }
 
 // setType changes a column's type. Options of the old type are cleared;
@@ -86,24 +90,101 @@ export function setSource(m, name, source) {
 export function setType(m, index, type, detected = null) {
   const col = columns(m)[index]
   if (col.type === type) return
-  col.type = type
-  for (const k of TARGET_TYPE_OPTIONS) delete col[k]
+  setColumnType(col, type)
   const r = m.columns?.[col.name]
-  if (r) for (const k of RULE_TYPE_OPTIONS) delete r[k]
-  if (col.default !== undefined) delete col.default
-  if (!r || !detected) return
+  if (!r) return
+  readAs(r, type, detected)
+  if (type === 'decimal' && detected?.type === 'decimal' && detected.scale != null) col.scale = detected.scale
+}
 
+// readAs sets how a rule reads its source for a type: the formats,
+// separators and boolean values detection found, when it read the source as
+// that type (or almost).
+function readAs(r, type, detected) {
+  for (const k of RULE_TYPE_OPTIONS) delete r[k]
+  if (!detected) return
   let read = null
   if (detected.type === type) {
     read = { formats: detected.formats, decimal_sep: detected.decimal_sep, thousands_sep: detected.thousands_sep,
       true_values: detected.true_values, false_values: detected.false_values }
   } else if (detected.near_type === type) {
     read = { formats: detected.near_formats, decimal_sep: detected.near_decimal_sep, thousands_sep: detected.near_thousands_sep }
+  } else if (detected.type === 'integer' && (type === 'decimal' || type === 'string')) {
+    read = type === 'decimal' ? { thousands_sep: detected.thousands_sep } : null
   }
   for (const [k, v] of Object.entries(read ?? {})) {
     if (v && (!Array.isArray(v) || v.length)) r[k] = v
   }
-  if (type === 'decimal' && detected.type === 'decimal' && detected.scale != null) col.scale = detected.scale
+}
+
+export const clone = (v) => JSON.parse(JSON.stringify(v))
+
+// linkTarget replaces the mapping's target by the content of a target file.
+// Rules (from rules, keyed by column name) are kept for target columns of the
+// same name; other target columns are mapped to a source column with a
+// matching name ("Order date" → order_date). Returns the columns mapped by
+// a guess, for the user to check: those whose source is not exactly named
+// like the target column. detect(source) returns what detection found in a
+// source column, so that rules read it as the target type expects.
+export function linkTarget(m, t, rules, sources, detect = () => null) {
+  const oldTypes = new Map(columns(m).map((c) => [c.name, c.type]))
+  t.output.header ??= true
+  m.target.inline = t
+  m.columns = {}
+  const matched = []
+  for (const c of t.columns) {
+    const old = rules[c.name]
+    if (old) {
+      const r = (m.columns[c.name] = clone(old))
+      // Read as the target's type, unless it is the type the rule was for.
+      if (oldTypes.get(c.name) !== c.type) readAs(r, c.type, detect(sources.find((s) => s.key === sourceKey(r))))
+      if (sourceKey(old) !== c.name) matched.push(c.name)
+      continue
+    }
+    const s = sources.find((s) => s.label === c.name) ??
+      sources.find((s) => targetName(s.label) === targetName(c.name) || s.label.toLowerCase() === c.name.toLowerCase())
+    if (s) {
+      const r = (m.columns[c.name] = sourceRule(s))
+      readAs(r, c.type, detect(s))
+      if (s.label !== c.name) matched.push(c.name)
+    }
+  }
+  return matched
+}
+
+// renameRules follows columns renamed in the target ({ old: new }).
+export function renameRules(m, renames) {
+  for (const [from, to] of Object.entries(renames)) {
+    if (m.columns?.[from] && !m.columns[to]) {
+      m.columns[to] = m.columns[from]
+      delete m.columns[from]
+    }
+  }
+}
+
+// Rules whose column the target does not have (renamed or removed there).
+export const orphans = (m) => Object.keys(m?.columns ?? {}).filter((n) => !columns(m).some((c) => c.name === n))
+
+// outputSummary describes a target's file format in a few words.
+export function outputSummary(o) {
+  if (!o) return ''
+  const d = { ',': 'comma', ';': 'semicolon', '\t': 'tab', tab: 'tab', '|': 'pipe' }[o.delimiter] ?? `“${o.delimiter}”`
+  return [o.encoding ?? 'utf-8', d, (o.line_ending ?? 'crlf').toUpperCase(), o.header === false ? 'no header' : 'header'].join(' · ')
+}
+
+export const blankTarget = () => ({
+  version: 1, name: '',
+  output: { encoding: 'utf-8', delimiter: ',', quote: '"', quote_style: 'minimal', escape: 'double', line_ending: 'crlf', header: true },
+  columns: [{ name: 'column_1', type: 'string' }],
+})
+
+// setColumnType changes a target column's type, clearing the options (and
+// default) of the old type.
+export function setColumnType(col, type) {
+  if (col.type === type) return
+  col.type = type
+  for (const k of TARGET_TYPE_OPTIONS) delete col[k]
+  delete col.default
 }
 
 // sources lists the source columns of the input: header names (trimmed,

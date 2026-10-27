@@ -39,7 +39,7 @@ The config schema must leave room for these (versioned, extensible).
 | **Engine** | The streaming pipeline that applies a mapping to a file. Shared by Studio, CLI and runner — one implementation, no drift. | Go package |
 | **Runner** | A prebuilt minimal converter binary. A standalone converter is a runner with a resolved mapping appended to it. | `cmd/runner` |
 
-A mapping references a target either by path or inline. A mapping with an inline target is **standalone**. In Studio, "Select target" offers existing target files or "New target from scratch" (created inline, can be extracted to a file later).
+A mapping references a target either by path or inline. A mapping with an inline target is **standalone**. A target file is a contract shared by several mappings: Studio edits it only in its target editor, never as a side effect of editing a mapping (see §8).
 
 ### Editor operations → config
 
@@ -450,20 +450,53 @@ Tests build a real converter for every golden case and run it as a separate proc
 
 ## 8. Studio (GUI)
 
-### Flow
+### Home
 
-1. **Home**: new mapping from a CSV file, open a mapping, recent files, or drop a file on the window.
-2. **Read the file**: detection pre-fills encoding, delimiter, quote, escape, header line, rows to skip, footer, comments, trim, null tokens, ragged rows and duplicate headers. The preview marks each row as skipped, header, data or footer, and follows every change.
-3. **Mapping & target** (new mappings only): name, description, target (defined in the mapping, stored in its own file, or an existing target file whose columns are matched to sources by name), output file format, error strategy, logging. Doing it before the columns means neither the name nor the target is forgotten.
+Two kinds of files, side by side, each with its recent files:
+
+- **Mappings**: new mapping from a CSV file, open a mapping.
+- **Targets**: new target, open a target.
+
+Dropping a file on the window opens it: a CSV starts a new mapping, a `*.target.yaml` (or any YAML holding a target) opens the target editor, other YAML files open as mappings.
+
+### Target rules
+
+A mapping's target is in one of three states:
+
+| State | Where it lives | In the mapping editor |
+|---|---|---|
+| **Linked** | An existing target file | Locked: output names, order, types, output formats, constraints and the output file format come from the file. The mapping only says how to fill each column: source, how the source is read, value map, default, error handling. |
+| **New file** | Defined while creating the mapping, written to its own file on the first save | Editable, like an inline target. Once saved it is a file like any other: linked, locked. |
+| **Inside the mapping** | Inline in the mapping file (one-off) | Editable. "Move to its own file" turns it into a new file. |
+
+Locked does not mean stuck: **Edit target…** opens the target editor on the linked file, with a banner saying that saving changes every mapping using it. Back in the mapping, the target is reloaded, columns renamed in the editor are renamed in the mapping's rules too, and the Review list shows what changed (new columns to map, rules whose column is gone). **Copy as a new target file** forks the target for a source that needs a variant.
+
+### New mapping
+
+1. **Read the file**: detection pre-fills encoding, delimiter, quote, escape, header line, rows to skip, footer, comments, trim, null tokens, ragged rows and duplicate headers. The preview marks each row as skipped, header, data or footer, and follows every change.
+2. **Target**, the main decision, as three cards:
+   - **Use a target file**: recent targets or browse. The card shows the target (columns, required columns, output format) and how well this file fits it: target columns found by name, required ones missing.
+   - **New target file** (selected by default): the target is drafted from this file's columns and saved next to the mapping as `<name>.target.yaml`, reusable by later mappings. Name, location and output file format are set here.
+   - **Inside this mapping**: one-off, for a mapping nobody will share.
+   Switching between cards keeps the draft, so trying a target file costs nothing. Opening the Target step of an existing mapping works the same way: "New target file" then means a copy of the current target.
+3. **Settings**: mapping name, description, invalid values strategy, logging. Doing it before the columns means neither the name nor the strategy is forgotten.
 4. **Map columns**:
-   - One row per output column, read left to right: source column with its detected type and confidence (coloured), then output name and type. Rows are reordered by dragging (auto-scroll near the edges, arrow keys on the grip), filtered by name, deleted or added; unused source columns can be added back in one click. Built for hundreds of columns.
+   - One row per output column, read left to right: source column with its detected type and confidence (coloured), then output name and type. With an editable target, rows are reordered by dragging (auto-scroll near the edges, arrow keys on the grip), filtered by name, deleted or added; unused source columns can be added back in one click. With a linked target, names, types and order are shown but not editable, and a banner names the target file with **Edit target…**. Built for hundreds of columns.
    - Changing a type picks up the formats and separators detection found for it. A warning shows when the type does not match the data.
    - The selected column's panel: detection (confidence bar, examples, rejected values, notes), how the source is read, value map, how the output is written, invalid values.
-   - **Review** list, first tab, in front whenever something needs a decision: target columns with no source (errors when required), source columns missing from the file, columns matched to a target by name (to confirm one by one or all at once), types that do not match the data, unused source columns. Each item jumps to its column; a target column without source can be given one directly from its panel.
+   - **Review** list, first tab, in front whenever something needs a decision: target columns with no source (errors when required), source columns missing from the file, columns matched to a target by name (to confirm one by one or all at once), types that do not match the data, rules for a column the target no longer has (one click removes them), unused source columns. Each item jumps to its column; a target column without source can be given one directly from its panel.
    - Live output preview of the first 100 rows, selected column highlighted, with rejected rows and messages in their own tabs. When the mapping is invalid, the problems replace the preview and Save, Convert and Export are disabled.
-5. **Save** (`Ctrl/⌘+S`), **Convert** a whole file, **Export** converters for any platform. Closing the window with unsaved changes asks first.
+5. **Save** (`Ctrl/⌘+S`), **Convert** a whole file, **Export** converters for any platform. Closing the window with unsaved changes asks first. Saving writes the target file only when the target is a new file; a linked target file is never rewritten by saving a mapping.
 
-Opening a saved mapping goes straight to the columns; a sample CSV can then be opened for the preview.
+Opening a saved mapping goes straight to the columns; a sample CSV can then be opened for the preview. Every step stays reachable from the stepper, the Target step included.
+
+### Target editor
+
+- **New target** asks for a starting point: **from an example of the expected file** (a file the receiving software exports or documents, not a partner file) or **blank**. From an example, detection drafts the columns with the exact header names, their types, and how the example writes them: delimiter, encoding, line endings, date formats, decimal and thousands separators. That is the format to produce.
+- **Open a target** edits an existing file: its name, description, output file format, and columns (name, type, required, default, constraints, output format), reordered by dragging like in the mapping editor. A column drafted from an example keeps its detected type, confidence and examples in its panel.
+- Problems are checked as in mappings; a target with errors cannot be saved.
+- Renaming or removing a column warns that mappings refer to columns by name. Studio cannot know every mapping using a target; the open mapping, if the editor was opened from it, is updated.
+- **New mapping for this target** starts a new mapping with this target already chosen.
 
 ### Architecture
 
@@ -519,3 +552,5 @@ All done; kept as the history of how lmmtfy was built.
 - Expressions: concatenate, split, compute columns.
 - Scientific notation as an output option for decimals.
 - Month names in other languages than English.
+- Check a file against a target: which rows and values do not conform. A target is also a validator, useful to test converted output.
+- Mappings remember a fingerprint of their target file, so opening one says what changed since it was last saved.

@@ -134,7 +134,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 	// Inline target.
 	inline := filepath.Join(dir, "inline.yaml")
-	if _, err := SaveMapping(fromEditor(t, l.Mapping), inline, ""); err != nil {
+	if _, err := SaveMapping(fromEditor(t, l.Mapping), inline, "", false); err != nil {
 		t.Fatal(err)
 	}
 	back, err := LoadMapping(inline)
@@ -146,7 +146,7 @@ func TestSaveAndLoad(t *testing.T) {
 	mapping := filepath.Join(dir, "m", "acme.yaml")
 	os.Mkdir(filepath.Dir(mapping), 0o755)
 	targetPath := filepath.Join(dir, "erp.target.yaml")
-	if _, err := SaveMapping(fromEditor(t, l.Mapping), mapping, targetPath); err != nil {
+	if _, err := SaveMapping(fromEditor(t, l.Mapping), mapping, targetPath, true); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(mapping)
@@ -166,7 +166,7 @@ func TestSaveAndLoad(t *testing.T) {
 	// Invalid mappings are not saved.
 	bad := fromEditor(t, l.Mapping)
 	bad.Name = ""
-	if _, err := SaveMapping(bad, filepath.Join(dir, "bad.yaml"), ""); err == nil {
+	if _, err := SaveMapping(bad, filepath.Join(dir, "bad.yaml"), "", false); err == nil {
 		t.Error("invalid mapping saved")
 	}
 }
@@ -205,7 +205,7 @@ func TestRecentFiles(t *testing.T) {
 	if got := RecentFiles(); len(got) != 0 {
 		t.Fatalf("fresh: %v", got)
 	}
-	files := make([]string, 12)
+	files := make([]string, maxRecent+2)
 	for i := range files {
 		files[i] = filepath.Join(dir, fmt.Sprintf("f%d.csv", i))
 		os.WriteFile(files[i], nil, 0o644)
@@ -214,10 +214,10 @@ func TestRecentFiles(t *testing.T) {
 		}
 	}
 	Remember("mapping", files[3]) // reopened: moves to the top, no duplicate
-	os.Remove(files[11])          // deleted files are not listed
+	os.Remove(files[maxRecent+1]) // deleted files are not listed
 
 	got := RecentFiles()
-	if len(got) != 9 || got[0].Path != files[3] || got[0].Kind != "mapping" {
+	if len(got) != maxRecent-1 || got[0].Path != files[3] || got[0].Kind != "mapping" {
 		t.Errorf("recent = %+v", got)
 	}
 }

@@ -3,18 +3,23 @@
   // the converted output.
   //
   // Built for wide files (hundreds of columns): rows are reordered by
-  // dragging their grip, the list scrolls by itself near its edges while
-  // dragging, a filter finds columns, and only the selected row carries the
-  // heavy source picker (one <select> of every source column per row would
-  // mean tens of thousands of DOM nodes).
-  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link } from '@lucide/svelte'
+  // dragging their grip, a filter finds columns, and only the selected row
+  // carries the heavy source picker (one <select> of every source column
+  // per row would mean tens of thousands of DOM nodes).
+  //
+  // With a linked target file (locked), the output columns are the file's:
+  // names, types and order are shown, not edited, and Edit target opens the
+  // target editor. Only how each column is filled belongs to the mapping.
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
   import ColumnDetails from './ColumnDetails.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
   import * as M from './mapping.js'
+  import { Reorder } from './reorder.svelte.js'
 
-  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], autoMatched = [], reviewKey = 0, samplePath = '', onsample } = $props()
+  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], autoMatched = [], reviewKey = 0, samplePath = '', onsample,
+    locked = false, targetFile = '', onedittarget = () => {} } = $props()
   const hasInput = $derived(!!samplePath)
 
   let selected = $state(0)
@@ -30,7 +35,9 @@
     for (const c of cols) map.set(c.name, M.issuesFor(issues, c.name))
     return map
   })
-  const general = $derived(issues.filter((i) => !cols.some((c) => byColumn.get(c.name)?.includes(i))))
+  // Issues of no column; rules for a column the target lacks are in Review.
+  const general = $derived(issues.filter((i) => !cols.some((c) => byColumn.get(c.name)?.includes(i)) &&
+    !M.orphans(mapping).some((n) => i.path === `columns.${n}` || i.path.startsWith(`columns.${n}.`))))
   const current = $derived(cols[Math.min(selected, cols.length - 1)])
   const visible = $derived.by(() => {
     const all = cols.map((col, i) => ({ col, i }))
@@ -45,6 +52,10 @@
     return detection.columns.find((c) => (r.source_index ? c.index === r.source_index : c.name === r.source)) ?? null
   }
   function sourceOf(key) { return sources.find((s) => s.key === key) ?? null }
+  function pickSource(name, key) {
+    const s = sourceOf(key)
+    M.setSource(mapping, name, s, s && detectedFor(s.index ? { source_index: s.index } : { source: s.name }))
+  }
   // A type that does not match what the data looks like deserves a warning.
   function mismatch(col, d) {
     if (!d || col.type === 'string') return ''
@@ -82,6 +93,10 @@
       const warn = mismatch(col, detectedFor(r))
       if (warn) items.push({ level: 'warn', i, name: col.name, text: warn + '.' })
     })
+    for (const name of M.orphans(mapping)) {
+      items.push({ level: 'error', i: -1, name, action: 'drop',
+        text: `A rule fills “${name}”, but the target has no such column (renamed or removed there).` })
+    }
     if (unused.length) {
       items.push({ level: 'info', i: -1, name: '', action: 'unused',
         text: `${unused.length} source ${unused.length === 1 ? 'column is' : 'columns are'} not in the output: ${unused.slice(0, 6).map((s) => s.label).join(', ')}${unused.length > 6 ? '…' : ''}` })
@@ -100,15 +115,17 @@
     requestAnimationFrame(() => listEl?.querySelector('tr.selected')?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
   }
   function confirm(name) { confirmed = new Set([...confirmed, name]) }
+  function dropRule(name) { delete mapping.columns[name] }
   const checks = $derived(review.filter((x) => x.level === 'check'))
   function confirmAll() { confirmed = new Set([...confirmed, ...checks.map((x) => x.name)]) }
 
   // The output preview highlights the selected column.
   const highlight = $derived(current && preview?.header ? preview.header.indexOf(current.name) : -1)
   function sourceLabel(r) {
+    if (!r) return '— not mapped —'
     const key = M.sourceKey(r)
     if (!key) return '— none: default value —'
-    return sourceOf(key) ? key : `${key} (not in this file)`
+    return sourceOf(key) || !sources.length ? key : `${key} (not in this file)`
   }
 
   function addFrom(source) {
@@ -121,92 +138,17 @@
     selected = Math.max(0, Math.min(selected, cols.length - 1))
   }
 
-  // Drag and drop, with pointer events: they behave the same in every web
-  // view, and do not interfere with dropping files on the window.
   let listEl = $state(null)
   let bodyEl = $state(null)
-  let drag = $state(null) // { from, to, x, y }
-  let frame = 0
-
-  function startDrag(e, i) {
-    if (filter || e.button !== 0) return
-    e.preventDefault()
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId) // keep receiving moves outside the grip
-    } catch {}
-    drag = { from: i, to: i, x: e.clientX, y: e.clientY }
-    selected = i
-    lastTime = 0
-    frame = requestAnimationFrame(autoScroll)
-  }
-  function moveDrag(e) {
-    if (!drag) return
-    drag.x = e.clientX
-    drag.y = e.clientY
-    updateTarget()
-  }
-  function endDrag() {
-    if (!drag) return
-    const { from, to } = drag
-    drag = null
-    cancelAnimationFrame(frame)
-    if (from !== to) {
-      M.moveTo(mapping, from, to)
-      selected = to
-    }
-  }
-  function cancelDrag(e) {
-    if (e.key === 'Escape' && drag) {
-      drag = null
-      cancelAnimationFrame(frame)
-    }
-  }
-  // Rows all have the same height: the row under the pointer is found by
-  // arithmetic, not by measuring hundreds of rows.
-  function updateTarget() {
-    const first = bodyEl?.rows[0]
-    if (!first) return
-    const top = first.getBoundingClientRect().top
-    const h = first.offsetHeight || 1
-    drag.to = Math.max(0, Math.min(cols.length - 1, Math.floor((drag.y - top) / h)))
-  }
-  // Scrolls while the pointer is near the top or bottom edge, faster the
-  // closer it gets (up to 1500 px/s). Speed depends on elapsed time, not on
-  // the frame rate, so slow machines scroll as fast as quick ones.
-  let lastTime = 0
-  function autoScroll(now = performance.now()) {
-    if (!drag || !listEl) return
-    const dt = lastTime ? Math.min(now - lastTime, 100) / 1000 : 0
-    lastTime = now
-    const r = listEl.getBoundingClientRect()
-    const edge = 56
-    const depth = drag.y < r.top + edge ? -(r.top + edge - drag.y) : drag.y > r.bottom - edge ? drag.y - (r.bottom - edge) : 0
-    if (depth) {
-      listEl.scrollTop += Math.sign(depth) * Math.min(1, Math.abs(depth) / edge) * 1500 * dt
-      updateTarget()
-    }
-    frame = requestAnimationFrame(autoScroll)
-  }
-  // Keyboard: arrow keys on a focused grip move its row.
-  function gripKey(e, i) {
-    const d = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0
-    if (!d || filter) return
-    e.preventDefault()
-    const to = Math.max(0, Math.min(cols.length - 1, i + d))
-    M.moveTo(mapping, i, to)
-    selected = to
-    requestAnimationFrame(() => bodyEl?.rows[to]?.querySelector('.grip')?.focus())
-  }
-  function dropClass(i) {
-    if (!drag || drag.from === drag.to) return ''
-    if (i === drag.to) return drag.to > drag.from ? 'drop-below' : 'drop-above'
-    return ''
-  }
+  const reorder = new Reorder({
+    list: () => listEl, body: () => bodyEl, count: () => cols.length, off: () => !!filter || locked,
+    move: (from, to) => M.moveTo(mapping, from, to), select: (i) => (selected = i),
+  })
 </script>
 
-<svelte:window onkeydown={cancelDrag} />
+<svelte:window onkeydown={reorder.cancel} />
 
-<div class="layout" class:dragging={!!drag}>
+<div class="layout" class:dragging={!!reorder.drag}>
   <section class="panel columns">
     <div class="head row">
       <span class="title"><Columns3 size={16} /> Columns</span>
@@ -215,8 +157,16 @@
       {#if toReview}<button class="to-review" onclick={() => (chosenTab = 'review')}><ListChecks size={13} /> {toReview} to review</button>{/if}
       <label class="search"><Search size={14} /><input type="search" bind:value={filter} placeholder="Filter columns…" /></label>
       <span class="spacer"></span>
-      <button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>
+      {#if !locked}<button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>{/if}
     </div>
+    {#if locked}
+      <div class="locked row">
+        <Lock size={14} />
+        <span>Target <strong class="mono" title={targetFile}>{targetFile.split(/[\\/]/).pop()}</strong>: output names, types and order come from it.</span>
+        <span class="spacer"></span>
+        <button onclick={onedittarget}><PencilRuler size={13} /> Edit target…</button>
+      </div>
+    {/if}
     <div class="scroll list" bind:this={listEl}>
       <table>
         <thead>
@@ -233,21 +183,24 @@
             {@const problems = byColumn.get(col.name) ?? []}
             {@const d = detectedFor(r)}
             {@const warn = mismatch(col, d)}
-            <tr class="{dropClass(i)}" class:selected={i === selected} class:moving={drag?.from === i} onclick={() => (selected = i)}>
+            <tr class="{reorder.dropClass(i)}" class:selected={i === selected} class:moving={reorder.drag?.from === i} onclick={() => (selected = i)}>
               <td class="grip-col">
-                <button class="grip" class:disabled={!!filter} tabindex={filter ? -1 : 0}
-                  title={filter ? 'Clear the filter to reorder' : 'Drag to reorder (or arrow keys)'} aria-label="Reorder {col.name}"
-                  onpointerdown={(e) => startDrag(e, i)} onpointermove={moveDrag} onpointerup={endDrag} onpointercancel={endDrag}
-                  onkeydown={(e) => gripKey(e, i)}><GripVertical size={15} /></button>
+                {#if !locked}
+                  <button class="grip" class:disabled={!!filter} tabindex={filter ? -1 : 0}
+                    title={filter ? 'Clear the filter to reorder' : 'Drag to reorder (or arrow keys)'} aria-label="Reorder {col.name}"
+                    onpointerdown={(e) => reorder.start(e, i)} onpointermove={reorder.move} onpointerup={reorder.end} onpointercancel={reorder.end}
+                    onkeydown={(e) => reorder.key(e, i)}><GripVertical size={15} /></button>
+                {/if}
               </td>
               <td class="num muted">{i + 1}</td>
               <td class="side-in">
                 <div class="source-cell">
                   {#if i === selected}
-                    <select value={M.sourceKey(r)} onchange={(e) => M.setSource(mapping, col.name, sourceOf(e.target.value))}>
+                    <select value={r ? M.sourceKey(r) : '-'} onchange={(e) => pickSource(col.name, e.target.value)}>
+                      {#if !r}<option value="-" disabled>— not mapped —</option>{/if}
                       <option value="">— none: default value —</option>
                       {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
-                      {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)} (not in this file)</option>{/if}
+                      {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)}{sources.length ? ' (not in this file)' : ''}</option>{/if}
                     </select>
                   {:else}
                     <span class="source" class:none={!M.sourceKey(r)}>{sourceLabel(r)}</span>
@@ -256,20 +209,26 @@
                 </div>
               </td>
               <td class="arrow"><ArrowRight size={14} /></td>
-              <td><input value={col.name} onchange={(e) => { if (!M.rename(mapping, i, e.target.value.trim())) e.target.value = col.name }} /></td>
+              <td>
+                {#if locked}<span class="fixed" title={col.name}>{col.name}{#if col.required}<span class="required-mark" title="Required"> *</span>{/if}</span>
+                {:else}<input value={col.name} onchange={(e) => { if (!M.rename(mapping, i, e.target.value.trim())) e.target.value = col.name }} />{/if}
+              </td>
               <td>
                 <div class="type-cell">
                   <TypeIcon type={col.type} />
-                  <select value={col.type} onchange={(e) => M.setType(mapping, i, e.target.value, d)}>
-                    {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
-                  </select>
+                  {#if locked}<span class="fixed">{col.type}</span>
+                  {:else}
+                    <select value={col.type} onchange={(e) => M.setType(mapping, i, e.target.value, d)}>
+                      {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
+                    </select>
+                  {/if}
                   {#if warn}<span class="mismatch" title={warn}><TriangleAlert size={14} /></span>{/if}
                 </div>
               </td>
               <td class="status">
                 {#if problems.some((p) => p.severity === 'error')}<span class="state error" title={problems.map((p) => p.message).join('\n')}><CircleAlert size={15} /></span>
                 {:else if problems.length}<span class="state warn" title={problems.map((p) => p.message).join('\n')}><TriangleAlert size={15} /></span>{/if}
-                <button class="icon delete" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column"><Trash2 size={14} /></button>
+                {#if !locked}<button class="icon delete" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column"><Trash2 size={14} /></button>{/if}
               </td>
             </tr>
           {/each}
@@ -278,21 +237,27 @@
       {#if filter && visible.length === 0}<p class="muted pad">No column matches “{filter}”.</p>{/if}
       {#if unused.length && !filter}
         <div class="unused">
-          <span class="muted"><Ban size={13} /> {unused.length} source {unused.length === 1 ? 'column is' : 'columns are'} not in the output — click to add:</span>
-          {#each unused as s}<button class="chip" onclick={() => addFrom(s)}><Plus size={12} /> {s.label}</button>{/each}
+          {#if locked}
+            <span class="muted"><Ban size={13} /> {unused.length} source {unused.length === 1 ? 'column is' : 'columns are'} not used (the target has no column for {unused.length === 1 ? 'it' : 'them'}):</span>
+            {#each unused as s}<span class="chip static">{s.label}</span>{/each}
+          {:else}
+            <span class="muted"><Ban size={13} /> {unused.length} source {unused.length === 1 ? 'column is' : 'columns are'} not in the output — click to add:</span>
+            {#each unused as s}<button class="chip" onclick={() => addFrom(s)}><Plus size={12} /> {s.label}</button>{/each}
+          {/if}
         </div>
       {/if}
       {#each general as i}<div class="issue {i.severity}">{i.path ? i.path + ': ' : ''}{i.message}</div>{/each}
     </div>
   </section>
 
-  {#if drag}
+  {#if reorder.drag}
+    {@const drag = reorder.drag}
     <div class="ghost" style="left: {drag.x + 14}px; top: {drag.y - 12}px">⠿ {cols[drag.from]?.name} → position {drag.to + 1}</div>
   {/if}
 
   <aside class="panel side scroll">
     {#if current && mapping.columns?.[current.name]}
-      <ColumnDetails col={current} r={mapping.columns[current.name]} {issues} detected={detectedFor(mapping.columns[current.name])} />
+      <ColumnDetails col={current} r={mapping.columns[current.name]} {issues} detected={detectedFor(mapping.columns[current.name])} {locked} />
     {:else if current}
       <div class="details unmapped">
         <h2>{current.name} <TypeIcon type={current.type} size={15} /></h2>
@@ -300,7 +265,7 @@
           {current.required ? 'Required by the target, but nothing fills it yet.' : 'In the target, but nothing fills it yet: it will be empty.'}
         </div>
         <label>Take its values from a source column
-          <select value="" onchange={(e) => e.target.value && M.setSource(mapping, current.name, sourceOf(e.target.value))}>
+          <select value="" onchange={(e) => e.target.value && pickSource(current.name, e.target.value)}>
             <option value="">Choose a source column…</option>
             {#each unused as s}<option value={s.key}>{s.label}</option>{/each}
             {#if unused.length && unused.length < sources.length}<option disabled>── already used ──</option>{/if}
@@ -347,13 +312,15 @@
               <span class="icon">
                 {#if item.level === 'error'}<CircleAlert size={15} />{:else if item.level === 'warn'}<TriangleAlert size={15} />{:else if item.level === 'check'}<CircleHelp size={15} />{:else}<Info size={15} />{/if}
               </span>
-              {#if item.i >= 0}<button class="link col" onclick={() => focusColumn(item.i)}>#{item.i + 1} {item.name}</button>{/if}
+              {#if item.i >= 0}<button class="link col" onclick={() => focusColumn(item.i)}>#{item.i + 1} {item.name}</button>
+              {:else if item.action === 'drop'}<span class="col mono">{item.name}</span>{/if}
               <span class="text">{item.text}</span>
               {#if item.action === 'map'}<button onclick={() => focusColumn(item.i)}><Link size={13} /> Choose a source</button>{/if}
               {#if item.action === 'confirm'}
                 <button onclick={() => focusColumn(item.i)}>Show</button>
                 <button onclick={() => confirm(item.name)}><Check size={13} /> Looks right</button>
               {/if}
+              {#if item.action === 'drop'}<button onclick={() => dropRule(item.name)}><Eraser size={13} /> Remove the rule</button>{/if}
               {#if item.action === 'unused'}<button onclick={() => listEl?.querySelector('.unused')?.scrollIntoView({ behavior: 'smooth' })}>Show them</button>{/if}
             </div>
           {:else}
@@ -424,6 +391,11 @@
   .delete { color: var(--muted); }
   .delete:hover { color: var(--error); }
   .unused .muted { display: inline-flex; gap: 5px; align-items: center; }
+  .chip.static { border: 1px solid var(--line); color: var(--muted); }
+  .locked { gap: 7px; padding: 6px 12px; font-size: 12px; background: var(--neutral-soft); border-bottom: 1px solid var(--line); color: var(--muted); }
+  .locked strong { color: var(--text); }
+  .locked button { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 2px 10px; }
+  .fixed { display: block; padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
   .chip { display: inline-flex; gap: 3px; align-items: center; }
   .tabs button { display: inline-flex; gap: 5px; align-items: center; }
   .to-review { display: inline-flex; gap: 4px; align-items: center; border-radius: 12px; padding: 1px 9px; font-size: 12px; background: var(--warn-soft); color: var(--warn); border-color: transparent; }

@@ -87,7 +87,7 @@ lmmtfy convert orders.csv --mapping orders.mapping.yaml -o clean.csv
 lmmtfy build --mapping orders.mapping.yaml --os linux -o orders-converter
 ```
 
-Studio does the same with a window: **New mapping from a CSV file**, three steps, done.
+Studio does the same with a window: **New mapping from a CSV file**, pick or create its target, map the columns, done. Targets have their own editor, so one target file serves every source.
 
 The **[user guide](docs/USER_GUIDE.md)** covers every option, the date format tokens, exit codes, running converters in production, and troubleshooting.
 

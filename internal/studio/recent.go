@@ -12,12 +12,12 @@ import (
 
 // Recent is a file opened recently in Studio.
 type Recent struct {
-	Kind   string    `json:"kind"` // "csv" or "mapping"
+	Kind   string    `json:"kind"` // "csv", "mapping" or "target"
 	Path   string    `json:"path"`
 	Opened time.Time `json:"opened"`
 }
 
-const maxRecent = 10
+const maxRecent = 20
 
 // configDir is where Studio keeps its settings: the user's own config
 // directory, never next to the executable or in system paths, so Studio

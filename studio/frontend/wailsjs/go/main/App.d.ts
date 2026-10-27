@@ -5,6 +5,8 @@ import {studio} from '../models';
 
 export function Check(arg1:config.Mapping):Promise<Array<studio.Issue>>;
 
+export function CheckTarget(arg1:config.Target):Promise<Array<studio.Issue>>;
+
 export function ChooseDirectory(arg1:string):Promise<string>;
 
 export function ChooseFile(arg1:string,arg2:string):Promise<string>;
@@ -12,6 +14,10 @@ export function ChooseFile(arg1:string,arg2:string):Promise<string>;
 export function ChooseSaveFile(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function Convert(arg1:config.Mapping,arg2:string,arg3:string):Promise<studio.Result>;
+
+export function DraftTarget(arg1:string):Promise<studio.TargetDraft>;
+
+export function Exists(arg1:string):Promise<boolean>;
 
 export function Export(arg1:config.Mapping,arg2:string,arg3:string,arg4:string):Promise<string>;
 
@@ -31,7 +37,9 @@ export function Recent():Promise<Array<studio.Recent>>;
 
 export function Remember(arg1:string,arg2:string):Promise<void>;
 
-export function SaveMapping(arg1:config.Mapping,arg2:string,arg3:string):Promise<Array<studio.Issue>>;
+export function SaveMapping(arg1:config.Mapping,arg2:string,arg3:string,arg4:boolean):Promise<Array<studio.Issue>>;
+
+export function SaveTarget(arg1:config.Target,arg2:string):Promise<Array<studio.Issue>>;
 
 export function SetDirty(arg1:boolean):Promise<void>;
 

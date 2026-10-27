@@ -6,6 +6,10 @@ export function Check(arg1) {
   return window['go']['main']['App']['Check'](arg1);
 }
 
+export function CheckTarget(arg1) {
+  return window['go']['main']['App']['CheckTarget'](arg1);
+}
+
 export function ChooseDirectory(arg1) {
   return window['go']['main']['App']['ChooseDirectory'](arg1);
 }
@@ -20,6 +24,14 @@ export function ChooseSaveFile(arg1, arg2, arg3) {
 
 export function Convert(arg1, arg2, arg3) {
   return window['go']['main']['App']['Convert'](arg1, arg2, arg3);
+}
+
+export function DraftTarget(arg1) {
+  return window['go']['main']['App']['DraftTarget'](arg1);
+}
+
+export function Exists(arg1) {
+  return window['go']['main']['App']['Exists'](arg1);
 }
 
 export function Export(arg1, arg2, arg3, arg4) {
@@ -58,8 +70,12 @@ export function Remember(arg1, arg2) {
   return window['go']['main']['App']['Remember'](arg1, arg2);
 }
 
-export function SaveMapping(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SaveMapping'](arg1, arg2, arg3);
+export function SaveMapping(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveMapping'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveTarget(arg1, arg2) {
+  return window['go']['main']['App']['SaveTarget'](arg1, arg2);
 }
 
 export function SetDirty(arg1) {

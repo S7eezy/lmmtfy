@@ -6,10 +6,12 @@
   import Section from './Section.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
+  import TargetColumnForm from './TargetColumnForm.svelte'
   import { list, joinList, issuesFor, sourceKey } from './mapping.js'
   import { pct } from './confidence.js'
 
-  let { col, r, issues = [], detected = null } = $props()
+  // locked: the target is a linked file, its options are shown, not edited.
+  let { col, r, issues = [], detected = null, locked = false } = $props()
 
   const hasSource = $derived(!!(r?.source || r?.source_index))
   const mine = $derived(issuesFor(issues, col.name))
@@ -132,50 +134,12 @@
     </Section>
   {/if}
 
-  <Section icon={FileOutput} title="Writing the output" hint="How the value is checked and written in the output file.">
-    <div class="grid">
-      <label class="inline"><input type="checkbox" checked={!!col.required} onchange={(e) => set(col, 'required', e.target.checked || '')} /> Required (no empty values)</label>
+  <Section icon={FileOutput} title="Writing the output" hint={locked ? 'Set by the target file: change it with Edit target.' : 'How the value is checked and written in the output file.'}>
+    <TargetColumnForm {col} readonly={locked} />
+    <div class="grid default">
       <label>Default value {hasSource ? '' : '(every row)'}
         <input value={r.default ?? ''} oninput={(e) => setDefault(e.target.value)} placeholder={col.default ?? (hasSource ? 'none' : 'empty')} />
       </label>
-      {#if col.type === 'string'}
-        <label>Case
-          <select value={col.case ?? ''} onchange={(e) => set(col, 'case', e.target.value)}>
-            <option value="">unchanged</option><option value="upper">UPPER</option><option value="lower">lower</option>
-          </select>
-        </label>
-        <label>Max length <input type="number" min="1" value={col.max_length ?? ''} oninput={(e) => set(col, 'max_length', e.target.value, true)} placeholder="no limit" /></label>
-        {#if col.max_length}
-          <label>When longer
-            <select value={col.on_overflow ?? ''} onchange={(e) => set(col, 'on_overflow', e.target.value)}>
-              <option value="">error</option><option value="truncate">truncate</option>
-            </select>
-          </label>
-        {/if}
-        <label>Pattern (whole value) <input class="mono" value={col.pattern ?? ''} oninput={(e) => set(col, 'pattern', e.target.value)} placeholder="[A-Z]{'{'}2{'}'}" /></label>
-        <label class="wide">Allowed values <input value={joinList(col.allowed_values)} oninput={(e) => setList(col, 'allowed_values', e.target.value)} placeholder="A, B, C" /></label>
-      {:else if numeric}
-        {#if col.type === 'decimal'}
-          <label>Decimals <input type="number" min="0" max="30" value={col.scale ?? ''} oninput={(e) => set(col, 'scale', e.target.value, true)} placeholder="as read" /></label>
-          <label>Rounding
-            <select value={col.rounding ?? ''} onchange={(e) => set(col, 'rounding', e.target.value)}>
-              <option value="">half up (2.345 → 2.35)</option><option value="half_even">half even (2.345 → 2.34)</option><option value="truncate">truncate</option>
-            </select>
-          </label>
-          <label>Decimal separator <input value={col.decimal_sep ?? ''} oninput={(e) => set(col, 'decimal_sep', e.target.value)} placeholder="." /></label>
-        {/if}
-        <label>Thousands separator <input value={col.thousands_sep ?? ''} oninput={(e) => set(col, 'thousands_sep', e.target.value)} placeholder="none" /></label>
-        <label>Minimum <input value={col.min ?? ''} oninput={(e) => set(col, 'min', e.target.value)} /></label>
-        <label>Maximum <input value={col.max ?? ''} oninput={(e) => set(col, 'max', e.target.value)} /></label>
-      {:else if col.type === 'boolean'}
-        <label>Write true as <input value={col.true_value ?? ''} oninput={(e) => set(col, 'true_value', e.target.value)} placeholder="true" /></label>
-        <label>Write false as <input value={col.false_value ?? ''} oninput={(e) => set(col, 'false_value', e.target.value)} placeholder="false" /></label>
-      {:else}
-        <label>Format <input class="mono" value={col.format ?? ''} oninput={(e) => set(col, 'format', e.target.value)} placeholder={{ date: 'YYYY-MM-DD', datetime: 'YYYY-MM-DDTHH:mm:ss', time: 'HH:mm:ss' }[col.type]} /></label>
-        {#if col.type === 'datetime'}
-          <label>Time zone <input value={col.timezone ?? ''} oninput={(e) => set(col, 'timezone', e.target.value)} placeholder="UTC" /></label>
-        {/if}
-      {/if}
     </div>
   </Section>
 
@@ -208,4 +172,5 @@
   .row button { display: inline-flex; gap: 4px; align-items: center; }
   .hint.with-icon { display: flex; gap: 4px; align-items: center; }
   .tokens .mono { word-spacing: 4px; }
+  .default { margin-top: 10px; }
 </style>

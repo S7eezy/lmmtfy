@@ -1,9 +1,9 @@
 <script>
-  // Step 2 of a new mapping: name it and choose its target before mapping
-  // columns, so neither is forgotten.
+  // Step 3 of a new mapping: name it and choose what happens with invalid
+  // values before mapping columns, so neither is forgotten.
   import { ArrowLeft, ArrowRight } from '@lucide/svelte'
   import SettingsForm from './SettingsForm.svelte'
-  let { mapping = $bindable(), targetPath = $bindable(), sources = [], ontarget, onback, oncontinue } = $props()
+  let { mapping = $bindable(), onback, oncontinue } = $props()
   const ready = $derived(!!mapping.name?.trim())
   let form = $state(null)
   $effect(() => {
@@ -16,12 +16,12 @@
 
 <div class="page panel scroll" bind:this={form}>
   <div class="intro">
-    <h2>Name the mapping and choose its target</h2>
-    <p class="muted">Everything here can be changed later in Settings.</p>
+    <h2>Name the mapping</h2>
+    <p class="muted">And choose what happens with values that cannot be converted. Everything here can be changed later in Settings.</p>
   </div>
-  <SettingsForm bind:mapping bind:targetPath {sources} {ontarget} />
+  <SettingsForm bind:mapping />
   <div class="row actions">
-    <button onclick={onback}><ArrowLeft size={14} /> Reading settings</button>
+    <button onclick={onback}><ArrowLeft size={14} /> Target</button>
     <span class="spacer"></span>
     {#if !ready}<span class="muted">Give the mapping a name to continue.</span>{/if}
     <button class="primary" onclick={oncontinue} disabled={!ready}>Map columns <ArrowRight size={14} /></button>

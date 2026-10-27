@@ -34,7 +34,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	answer, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,
 		Title:         "Unsaved changes",
-		Message:       "The mapping has unsaved changes. Quit and discard them?",
+		Message:       "There are unsaved changes. Quit and discard them?",
 		Buttons:       []string{"Discard and quit", "Cancel"},
 		DefaultButton: "Cancel",
 		CancelButton:  "Cancel",
@@ -45,11 +45,12 @@ func (a *App) beforeClose(ctx context.Context) bool {
 var filters = map[string][]runtime.FileFilter{
 	"csv":     {{DisplayName: "CSV files (*.csv, *.txt, *.tsv)", Pattern: "*.csv;*.txt;*.tsv"}, {DisplayName: "All files", Pattern: "*"}},
 	"mapping": {{DisplayName: "Mappings (*.yaml, *.yml)", Pattern: "*.yaml;*.yml"}, {DisplayName: "All files", Pattern: "*"}},
+	"target":  {{DisplayName: "Targets (*.target.yaml, *.yaml)", Pattern: "*.target.yaml;*.target.yml;*.yaml;*.yml"}, {DisplayName: "All files", Pattern: "*"}},
 	"any":     {{DisplayName: "All files", Pattern: "*"}},
 }
 
 // ChooseFile asks for a file to open; "" when cancelled. kind is csv,
-// mapping or any.
+// mapping, target or any.
 func (a *App) ChooseFile(title, kind string) (string, error) {
 	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: title, Filters: filters[kind]})
 }
@@ -85,8 +86,16 @@ func (a *App) LoadMapping(path string) (*studio.Loaded, error) { return studio.L
 
 func (a *App) LoadTarget(path string) (*config.Target, error) { return studio.LoadTarget(path) }
 
-func (a *App) SaveMapping(m config.Mapping, path, targetPath string) ([]studio.Issue, error) {
-	return studio.SaveMapping(&m, path, targetPath)
+func (a *App) DraftTarget(path string) (*studio.TargetDraft, error) { return studio.DraftTarget(path) }
+
+func (a *App) CheckTarget(t config.Target) []studio.Issue { return studio.CheckTarget(&t) }
+
+func (a *App) SaveTarget(t config.Target, path string) ([]studio.Issue, error) {
+	return studio.SaveTarget(&t, path)
+}
+
+func (a *App) SaveMapping(m config.Mapping, path, targetPath string, writeTarget bool) ([]studio.Issue, error) {
+	return studio.SaveMapping(&m, path, targetPath, writeTarget)
 }
 
 func (a *App) Convert(m config.Mapping, input, output string) (*studio.Result, error) {
@@ -100,6 +109,8 @@ func (a *App) Export(m config.Mapping, goos, arch, dir string) (string, error) {
 	name := studio.ConverterName(&m, goos, arch)
 	return studio.Export(&m, goos, arch, filepath.Join(dir, name))
 }
+
+func (a *App) Exists(path string) bool { return studio.Exists(path) }
 
 func (a *App) Version() string { return version.Version }
 

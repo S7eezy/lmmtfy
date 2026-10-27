@@ -1,10 +1,11 @@
 <script>
-  // The three steps of building a mapping. Done steps can be revisited.
-  import { FileSearch, Settings2, Columns3, Check } from '@lucide/svelte'
-  let { current, enabled = [true, true, true], onstep } = $props()
+  // The steps of building a mapping. Done steps can be revisited.
+  import { FileSearch, Target, Settings2, Columns3, Check } from '@lucide/svelte'
+  let { current, enabled = [true, true, true, true], onstep } = $props()
   const steps = [
     { id: 'read', label: 'Read the file', icon: FileSearch },
-    { id: 'setup', label: 'Mapping & target', icon: Settings2 },
+    { id: 'target', label: 'Target', icon: Target },
+    { id: 'setup', label: 'Settings', icon: Settings2 },
     { id: 'edit', label: 'Map columns', icon: Columns3 },
   ]
   const index = $derived(steps.findIndex((s) => s.id === current))

@@ -297,21 +297,18 @@ func LoadMapping(path string) (*Loaded, error) {
 	return l, nil
 }
 
-// LoadTarget reads a target file, to use in the mapping being edited.
-func LoadTarget(path string) (*config.Target, error) {
-	return config.LoadTarget(path)
-}
-
-// SaveMapping writes the mapping to path. With a targetPath, the target is
-// written to that file and the mapping refers to it (relative path);
-// otherwise the target is written inline. The mapping must be valid.
-func SaveMapping(m *config.Mapping, path, targetPath string) ([]Issue, error) {
+// SaveMapping writes the mapping to path. With a targetPath, the mapping
+// refers to that target file (relative path), and writes the target there
+// only with writeTarget: a target file linked by a mapping is shared, and
+// is only changed by saving it in the target editor. Without a targetPath
+// the target is written inline. The mapping must be valid.
+func SaveMapping(m *config.Mapping, path, targetPath string, writeTarget bool) ([]Issue, error) {
 	plan, issues := compile(m)
 	if plan == nil {
 		return issues, errors.New("the mapping has errors: fix them before saving")
 	}
 	ref := ""
-	if targetPath != "" {
+	if targetPath != "" && writeTarget {
 		data, err := config.FormatTarget(m.Target.Inline)
 		if err != nil {
 			return issues, err
@@ -319,6 +316,8 @@ func SaveMapping(m *config.Mapping, path, targetPath string) ([]Issue, error) {
 		if err := writeFile(targetPath, data); err != nil {
 			return issues, err
 		}
+	}
+	if targetPath != "" {
 		ref = targetPath
 		if rel, err := filepath.Rel(filepath.Dir(path), targetPath); err == nil {
 			ref = filepath.ToSlash(rel)
@@ -329,6 +328,13 @@ func SaveMapping(m *config.Mapping, path, targetPath string) ([]Issue, error) {
 		return issues, err
 	}
 	return issues, writeFile(path, data)
+}
+
+// Exists reports whether a file exists, so that the editor can ask before
+// replacing one.
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // writeFile replaces path atomically, like conversions do.

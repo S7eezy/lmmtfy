@@ -53,19 +53,38 @@ lmmtfy convert examples/acme-orders/input.csv --mapping examples/acme-orders/map
 
 ## Studio
 
-1. **New mapping from a CSV file** (or drop the file on the window). Studio detects how to read it.
-2. **Read the file.** Check encoding, delimiter, quotes, header line, lines to skip at the top and bottom, values to read as empty. The preview marks each row: skipped (struck through), header (bold), data, footer. It updates as you change settings.
-3. **Map columns.** Each row is an output column, in output order:
-   - **Output name** and **type**.
-   - **From source column**, or *none* to fill it with a default value (added columns).
-   - ↑ ↓ to reorder, 🗑 to delete. Unused source columns are listed below the table: click one to add it.
-   - Select a column to see what was detected and to set its options on the right: required, default, empty and missing values, error handling, type options (how values are read and written), value map.
-   - The **Review** tab lists what needs a decision: target columns with no source, source columns missing from the file, columns matched to a target by name (confirm them, one by one or all at once), types that do not match the data, unused source columns. Click an item to jump to its column.
-   - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
-4. **Settings**: mapping name, where the target is stored, output file format, error strategy, logging.
-5. **Save** writes the mapping (YAML). **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
+The home screen has two sides: **mappings** and **targets**, each with its recent files. Dropping a file on the window opens it: a CSV file starts a new mapping, a `*.target.yaml` file opens the target editor, other YAML files open as mappings.
 
-Opening a saved mapping goes straight to the column editor; open a sample CSV file to get the preview. Recent files are listed on the home screen.
+### A new mapping
+
+1. **New mapping from a CSV file**. Studio detects how to read it.
+2. **Read the file.** Check encoding, delimiter, quotes, header line, lines to skip at the top and bottom, values to read as empty. The preview marks each row: skipped (struck through), header (bold), data, footer. It updates as you change settings.
+3. **Target**: what the file becomes. Three choices:
+   - **Use a target file**: the format is fixed, the file is mapped onto it. Columns with matching names are mapped right away; the card shows how many target columns were found and which ones are left, required ones in red.
+   - **New target file** (the default): the target starts as this file's columns, and is saved as its own file next to the mapping (`<name>.target.yaml`) on the first save, so the next source can reuse it.
+   - **Inside this mapping**: for a one-off mapping nobody will share.
+   You can switch between them freely; the target drafted from the file is kept.
+4. **Settings**: mapping name, what happens with values that cannot be converted, logging.
+5. **Map columns.** Each row is an output column, in output order: the source column it comes from (with its detected type and confidence), then the output name and type.
+   - With a new or inside target, everything is editable: rename, retype, drag rows to reorder, delete, add columns; unused source columns are listed below the table, click one to add it.
+   - With a target file, the output columns are the file's: names, types and order are shown but locked. You choose where each value comes from and how it is read. To change the target itself, use **Edit target…** (see below).
+   - Select a column to see what was detected and to set its options on the right: source, empty and missing values, how values are read, value map, default, error handling, and how the value is written (shown read-only for a target file).
+   - The **Review** tab lists what needs a decision: target columns with no source, source columns missing from the file, columns matched to a target by name (confirm them, one by one or all at once), types that do not match the data, rules for a column the target no longer has, unused source columns. Click an item to jump to its column.
+   - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
+6. **Save** writes the mapping (YAML), and a new target file with it. **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
+
+Opening a saved mapping goes straight to the column editor; open a sample CSV file to get the preview. Every step stays reachable from the steps at the top, the Target step included: there you can link another target file, copy the current one into a new file, or keep the target inside the mapping.
+
+### Targets
+
+A target file is shared by every mapping that uses it, so Studio only changes it in the **target editor**, never by saving a mapping.
+
+- **New target**: **from an example of the expected file** (a file the receiving software exports or documents, not a partner's file) or **blank**. From an example, Studio drafts the columns with their exact header names, types and formats, and the file format: delimiter, encoding, line endings, date formats, decimal and thousands separators.
+- **Open a target** to change its columns (name, type, required, default, constraints, output format; drag to reorder) or, in **Settings**, its name and file format.
+- **New mapping for this target** starts a new mapping with the target already chosen.
+- **Edit target…** in a mapping opens the editor on its target file. Back in the mapping, the target is reloaded: renamed columns are renamed in the mapping too, and the Review list shows what changed.
+
+Mappings refer to target columns by name. Renaming or removing a column leaves the rule of every other mapping using the target behind: their Review list shows it, with a button to remove the rule, and asks to map the new column.
 
 ## Mapping reference
 
