@@ -1,3 +1,6 @@
+# Everything here is built or generated: `git add .` must never pick up a
+# binary. Source assets that look like build output are kept explicitly.
+
 # Build output
 /dist/
 
@@ -5,12 +8,58 @@
 /internal/runners/bin/*
 !/internal/runners/bin/.gitkeep
 
+# Binaries from a plain `go build` in the repository
+/lmmtfy
+/lmmtfy.exe
+/runner
+/runner.exe
+/cmd/lmmtfy/lmmtfy
+/cmd/lmmtfy/lmmtfy.exe
+/cmd/runner/runner
+/cmd/runner/runner.exe
+
+# Converters built with `lmmtfy build` or exported from Studio
+*-converter
+*-converter.exe
+*-converter-*-*
+
+# Any compiled program or library, anywhere
+*.exe
+*.dll
+*.so
+*.dylib
+*.syso
+*.app/
+
+# Release and download archives
+*.zip
+*.tar.gz
+*.tgz
+
+# Temporary files of interrupted conversions and saves (written as
+# .<name>.<random>.tmp, renamed on success)
+.*.tmp
+
 # Go
 *.test
 *.out
+*.prof
+*.pprof
 coverage.*
+*.coverprofile
+go.work
+go.work.sum
+
+# Logs and local configuration
+*.log
+.env
+.env.*
 
 # OS / editors
 .DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
 .idea/
 .vscode/

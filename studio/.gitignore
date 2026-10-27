@@ -3,3 +3,12 @@
 /frontend/dist/
 /frontend/node_modules/
 /frontend/package.json.md5
+
+# Binary from a plain `go build` in this module
+/studio
+/lmmtfy-studio
+/lmmtfy-studio.exe
+
+# Node
+npm-debug.log*
+.vite/
