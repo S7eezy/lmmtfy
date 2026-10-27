@@ -110,3 +110,39 @@ func mustRead(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+// A rule without source and without a default of its own takes the target
+// default; an explicit empty default overrides it. The editor relies on
+// this: an empty default field means "the target default".
+func TestTargetDefaultFillsColumnsWithoutSource(t *testing.T) {
+	o, err := Open(acme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := fromEditor(t, o.Mapping)
+	def := config.Scalar("SENSOR_2")
+	m.Target.Inline.Columns = append(m.Target.Inline.Columns, config.TargetColumn{Name: "sensor_name", Type: "string", Default: &def})
+
+	value := func(rule *config.Rule) string {
+		t.Helper()
+		delete(m.Columns, "sensor_name")
+		if rule != nil {
+			m.Columns["sensor_name"] = *rule
+		}
+		res, err := PreviewOutput(acme, fromEditor(t, m))
+		if err != nil || res.Failure != "" || len(res.Rows) == 0 {
+			t.Fatalf("preview: %v %+v", err, res)
+		}
+		return res.Rows[0][len(res.Header)-1]
+	}
+	empty := config.Scalar("")
+	if got := value(nil); got != "SENSOR_2" {
+		t.Errorf("not mapped: %q, want the target default", got)
+	}
+	if got := value(&config.Rule{}); got != "SENSOR_2" {
+		t.Errorf("rule without default: %q, want the target default", got)
+	}
+	if got := value(&config.Rule{Default: &empty}); got != "" {
+		t.Errorf("empty default: %q, want empty", got)
+	}
+}

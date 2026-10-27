@@ -75,9 +75,17 @@
       const r = mapping.columns?.[col.name]
       const key = M.sourceKey(r)
       if (!r) {
-        items.push({ level: col.required ? 'error' : 'warn', i, name: col.name, action: 'map',
-          text: col.required ? 'Required by the target, but no source column is mapped.' : 'In the target, but no source column is mapped: it will be empty.' })
+        if (col.default !== undefined) {
+          items.push({ level: 'info', i, name: col.name, action: 'map', text: `No source column: every row gets the target default “${col.default}”.` })
+        } else {
+          items.push({ level: col.required ? 'error' : 'warn', i, name: col.name, action: 'map',
+            text: col.required ? 'Required by the target, but no source column is mapped.' : 'In the target, but no source column is mapped: it will be empty.' })
+        }
         return
+      }
+      if (r.default === '' && col.default !== undefined) {
+        items.push({ level: 'warn', i, name: col.name, action: 'targetdefault',
+          text: `The default is empty, which overrides the target default “${col.default}”.` })
       }
       for (const p of (byColumn.get(col.name) ?? []).filter((p) => p.severity === 'error')) {
         items.push({ level: 'error', i, name: col.name, text: p.message })
@@ -261,9 +269,13 @@
     {:else if current}
       <div class="details unmapped">
         <h2>{current.name} <TypeIcon type={current.type} size={15} /></h2>
-        <div class="issue {current.required ? 'error' : 'warning'}">
-          {current.required ? 'Required by the target, but nothing fills it yet.' : 'In the target, but nothing fills it yet: it will be empty.'}
-        </div>
+        {#if current.default !== undefined}
+          <div class="issue info">No source column: every row gets the target default “{current.default}”.</div>
+        {:else}
+          <div class="issue {current.required ? 'error' : 'warning'}">
+            {current.required ? 'Required by the target, but nothing fills it yet.' : 'In the target, but nothing fills it yet: it will be empty.'}
+          </div>
+        {/if}
         <label>Take its values from a source column
           <select value="" onchange={(e) => e.target.value && pickSource(current.name, e.target.value)}>
             <option value="">Choose a source column…</option>
@@ -273,7 +285,8 @@
           </select>
         </label>
         <p class="muted or">or</p>
-        <button onclick={() => (mapping.columns[current.name] = { default: '' })}>Fill it with a default value</button>
+        <button onclick={() => (mapping.columns[current.name] = current.default !== undefined ? {} : { default: '' })}>
+          {current.default !== undefined ? 'Set a default of this mapping' : 'Fill it with a default value'}</button>
       </div>
     {:else}
       <p class="muted pad">Add a column to start.</p>
@@ -320,6 +333,7 @@
                 <button onclick={() => focusColumn(item.i)}>Show</button>
                 <button onclick={() => confirm(item.name)}><Check size={13} /> Looks right</button>
               {/if}
+              {#if item.action === 'targetdefault'}<button onclick={() => delete mapping.columns[item.name].default}>Use the target default</button>{/if}
               {#if item.action === 'drop'}<button onclick={() => dropRule(item.name)}><Eraser size={13} /> Remove the rule</button>{/if}
               {#if item.action === 'unused'}<button onclick={() => listEl?.querySelector('.unused')?.scrollIntoView({ behavior: 'smooth' })}>Show them</button>{/if}
             </div>

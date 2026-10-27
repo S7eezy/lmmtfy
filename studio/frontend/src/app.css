@@ -79,6 +79,7 @@ h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: 
 .issue { padding: 4px 8px; border-radius: 5px; margin: 3px 0; font-size: 12px; }
 .issue.error { background: var(--error-soft); color: var(--error); }
 .issue.warning { background: var(--warn-soft); color: var(--warn); }
+.issue.info { background: var(--soft); color: var(--accent); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .scroll { overflow: auto; }
 

@@ -27,8 +27,11 @@
     if (v.length) obj[key] = v
     else delete obj[key]
   }
+  // An empty field means no default of the mapping's own: the target's
+  // default applies, if any. Only a column with neither a source nor a
+  // target default needs an explicit empty default.
   function setDefault(value) {
-    if (value === '' && hasSource) delete r.default
+    if (value === '' && (hasSource || col.default !== undefined)) delete r.default
     else r.default = value
   }
   function addPair() { r.map = [...(r.map ?? []), { from: '', to: '' }] }
@@ -138,8 +141,11 @@
     <TargetColumnForm {col} readonly={locked} />
     <div class="grid default">
       <label>Default value {hasSource ? '' : '(every row)'}
-        <input value={r.default ?? ''} oninput={(e) => setDefault(e.target.value)} placeholder={col.default ?? (hasSource ? 'none' : 'empty')} />
+        <input value={r.default ?? ''} oninput={(e) => setDefault(e.target.value)} placeholder={col.default !== undefined ? `target default: ${col.default}` : hasSource ? 'none' : 'empty'} />
       </label>
+      {#if r.default === '' && col.default !== undefined}
+        <p class="hint override">Empty, which overrides the target default. <button class="link" onclick={() => delete r.default}>Use “{col.default}”</button></p>
+      {/if}
     </div>
   </Section>
 
@@ -173,4 +179,6 @@
   .hint.with-icon { display: flex; gap: 4px; align-items: center; }
   .tokens .mono { word-spacing: 4px; }
   .default { margin-top: 10px; }
+  .override { grid-column: 1 / -1; margin: 0; }
+  .override button { padding: 0; }
 </style>

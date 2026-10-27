@@ -74,7 +74,9 @@ export function setSource(m, name, source, detected = null) {
   delete r.source
   delete r.source_index
   if (!source) {
-    r.default ??= ''
+    // Without a source, a value comes from a default: the target's, or else
+    // an empty one.
+    if (columns(m).find((c) => c.name === name)?.default === undefined) r.default ??= ''
     return
   }
   if (source.index) r.source_index = source.index
