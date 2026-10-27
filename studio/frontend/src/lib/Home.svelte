@@ -63,13 +63,13 @@
         <span class="group-icon"><Workflow size={18} /></span>
         <div><h2>Mappings</h2><p>How one source becomes your target.</p></div>
       </div>
-      <button class="action primary" onclick={() => onnewmapping()}>
-        <FilePlus2 size={20} />
+      <button class="action new" onclick={() => onnewmapping()}>
+        <span class="tile"><FilePlus2 size={18} /></span>
         <span><strong>New mapping from a CSV file</strong><small>Read it, choose its target, map its columns.</small></span>
         <ArrowRight size={16} class="go" />
       </button>
       <button class="action" onclick={() => onopenmapping()}>
-        <FolderOpen size={18} />
+        <span class="tile"><FolderOpen size={17} /></span>
         <span><strong>Open a mapping</strong><small>Edit it, convert files, export converters.</small></span>
       </button>
       <div class="recent">
@@ -89,13 +89,13 @@
         <span class="group-icon"><Target size={18} /></span>
         <div><h2>Targets</h2><p>The format your software expects, shared by mappings.</p></div>
       </div>
-      <button class="action primary soft" onclick={() => onnewtarget()}>
-        <FilePlus2 size={20} />
+      <button class="action new" onclick={() => onnewtarget()}>
+        <span class="tile"><FilePlus2 size={18} /></span>
         <span><strong>New target</strong><small>From an example of the expected file, or blank.</small></span>
         <ArrowRight size={16} class="go" />
       </button>
       <button class="action" onclick={() => onopentarget()}>
-        <FolderOpen size={18} />
+        <span class="tile"><FolderOpen size={17} /></span>
         <span><strong>Open a target</strong><small>Change its columns or file format.</small></span>
       </button>
       <div class="recent">
@@ -124,7 +124,7 @@
     background: radial-gradient(ellipse 60% 38% at 50% 0%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%); margin: -12px; }
 
   .hero { text-align: center; max-width: 900px; flex-shrink: 0; }
-  .logo { border-radius: 17px; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .logo { border-radius: 17px; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 30%, transparent); }
   h1 { font-size: 30px; letter-spacing: -0.02em; margin: 14px 0 4px; }
   .tagline { font-size: 15px; color: var(--muted); margin: 0; }
 
@@ -143,26 +143,28 @@
 
   .groups { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 18px; width: 100%; max-width: 940px; margin: 3vh 0 12px; flex: 1; min-height: 300px; max-height: 620px; }
   .group { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; padding: 14px 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.04), 0 10px 30px rgb(0 0 0 / 0.04); }
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); }
   .group-head { display: flex; gap: 11px; align-items: center; margin-bottom: 6px; }
   .group-icon { display: inline-flex; width: 36px; height: 36px; border-radius: 10px; align-items: center; justify-content: center; background: var(--soft); color: var(--accent); flex-shrink: 0; }
   .group h2 { font-size: 16px; margin: 0; }
   .group-head p { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
 
-  .action { display: flex; gap: 12px; align-items: center; text-align: left; padding: 11px 14px; border-radius: 11px; width: 100%;
-    transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s; color: var(--text); }
-  .action :global(svg) { flex-shrink: 0; color: var(--accent); }
+  /* Both kinds of files are equals: the "New" actions share one calm style,
+     a tinted card with an accent tile; Open actions are plain. Accent shows
+     on hover. */
+  .action { display: flex; gap: 12px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 12px; width: 100%;
+    color: var(--text); background: var(--panel); transition: border-color 0.12s, background-color 0.12s; }
   .action strong { display: block; font-size: 13.5px; }
   .action small { display: block; font-size: 12px; color: var(--muted); }
-  .action > span { flex: 1; min-width: 0; }
-  .action:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgb(0 0 0 / 0.08); }
-  .action.primary { padding: 13px 16px; background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  .action.primary :global(svg), .action.primary small { color: inherit; }
-  .action.primary small { opacity: 0.85; }
-  .action.primary.soft { background: var(--soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); }
-  .action.primary.soft :global(svg) { color: var(--accent); }
-  .action.primary.soft small { color: var(--muted); opacity: 1; }
-  .action :global(.go) { opacity: 0.6; transition: transform 0.12s, opacity 0.12s; }
+  .action > span:not(.tile) { flex: 1; min-width: 0; }
+  .tile { display: inline-flex; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; align-items: center; justify-content: center;
+    background: var(--neutral-soft); color: var(--muted); transition: background-color 0.12s, color 0.12s; }
+  .action:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .action:hover .tile { background: var(--soft); color: var(--accent); }
+  .action.new { background: color-mix(in srgb, var(--soft) 55%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); }
+  .action.new .tile { background: var(--accent); color: var(--accent-text); }
+  .action.new:hover { background: var(--soft); }
+  .action :global(.go) { color: var(--accent); opacity: 0.5; transition: transform 0.12s, opacity 0.12s; flex-shrink: 0; }
   .action:hover :global(.go) { opacity: 1; transform: translateX(2px); }
 
   .recent { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 4px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
