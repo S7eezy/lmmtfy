@@ -44,6 +44,7 @@ func main() {
 		log.Fatal(err)
 	}
 	guide := file{name: "USER_GUIDE.md", src: "docs/USER_GUIDE.md"}
+	license := file{name: "LICENSE", src: "LICENSE"}
 	examples := []file{
 		{name: "examples/acme-orders/input.csv", src: "testdata/acme-orders/input.csv"},
 		{name: "examples/acme-orders/mapping.yaml", src: "testdata/acme-orders/mapping.yaml"},
@@ -67,6 +68,7 @@ func main() {
 			{name: exe, src: bin, exec: true},
 			{name: "README.txt", data: []byte(cliReadme(*version, exe, windows))},
 			guide,
+			license,
 		}, examples...)
 		made = append(made, write(out, dir, windows, files))
 	}
@@ -79,10 +81,11 @@ func main() {
 			{name: "lmmtfy-studio.exe", src: exe, exec: true},
 			{name: "README.txt", data: []byte(studioReadme(*version, "windows"))},
 			guide,
+			license,
 		}))
 	}
 	if app := filepath.Join(studio, "lmmtfy Studio.app"); exists(app) {
-		files := []file{{name: "README.txt", data: []byte(studioReadme(*version, "macos"))}, guide}
+		files := []file{{name: "README.txt", data: []byte(studioReadme(*version, "macos"))}, guide, license}
 		filepath.WalkDir(app, func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
@@ -101,6 +104,7 @@ func main() {
 			{name: "lmmtfy-studio", src: bin, exec: true},
 			{name: "README.txt", data: []byte(studioReadme(*version, "linux"))},
 			guide,
+			license,
 		}))
 	}
 

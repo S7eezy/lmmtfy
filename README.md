@@ -13,6 +13,7 @@
   <a href="https://github.com/S7eezy/lmmtfy/actions/workflows/ci.yml"><img src="https://github.com/S7eezy/lmmtfy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white" alt="Go 1.27">
   <img src="https://img.shields.io/badge/runs_on-Windows%20%7C%20Linux%20%7C%20macOS-555" alt="Windows, Linux, macOS">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
 ---
@@ -114,3 +115,7 @@ The full design is in **[DESIGN.md](DESIGN.md)**.
 ## Built with
 
 [Go](https://go.dev), [Wails](https://wails.io), [Svelte](https://svelte.dev), [Lucide](https://lucide.dev) icons, [goccy/go-yaml](https://github.com/goccy/go-yaml), [shopspring/decimal](https://github.com/shopspring/decimal).
+
+## License
+
+[MIT](LICENSE)
