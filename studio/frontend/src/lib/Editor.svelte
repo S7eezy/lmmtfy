@@ -7,18 +7,18 @@
   // dragging, a filter finds columns, and only the selected row carries the
   // heavy source picker (one <select> of every source column per row would
   // mean tens of thousands of DOM nodes).
-  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet } from '@lucide/svelte'
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
   import ColumnDetails from './ColumnDetails.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
   import * as M from './mapping.js'
 
-  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], samplePath = '', onsample } = $props()
+  let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], autoMatched = [], reviewKey = 0, samplePath = '', onsample } = $props()
   const hasInput = $derived(!!samplePath)
 
   let selected = $state(0)
-  let tab = $state('output')
+  let chosenTab = $state(null) // null: Review when something needs attention, else the output
   let filter = $state('')
 
   const cols = $derived(M.columns(mapping))
@@ -54,6 +54,55 @@
     if (d.type === col.type || (d.type === 'integer' && col.type === 'decimal') || (d.type === 'date' && col.type === 'datetime')) return ''
     return `The sampled values look like ${d.type}, not ${col.type}`
   }
+  // Review: everything that needs a decision, in one list. Each item points
+  // to its column. "check" items (columns matched by name to a target) go
+  // away once confirmed.
+  let confirmed = $state(new Set())
+  const review = $derived.by(() => {
+    const items = []
+    cols.forEach((col, i) => {
+      const r = mapping.columns?.[col.name]
+      const key = M.sourceKey(r)
+      if (!r) {
+        items.push({ level: col.required ? 'error' : 'warn', i, name: col.name, action: 'map',
+          text: col.required ? 'Required by the target, but no source column is mapped.' : 'In the target, but no source column is mapped: it will be empty.' })
+        return
+      }
+      for (const p of (byColumn.get(col.name) ?? []).filter((p) => p.severity === 'error')) {
+        items.push({ level: 'error', i, name: col.name, text: p.message })
+      }
+      if (key && sources.length && !sourceOf(key)) {
+        const optional = r.if_missing && r.if_missing !== 'error'
+        items.push({ level: optional ? 'info' : 'error', i, name: col.name, action: 'map',
+          text: `Source column “${key}” is not in this file${optional ? ' (optional: handled)' : ''}.` })
+      }
+      if (autoMatched.includes(col.name) && !confirmed.has(col.name)) {
+        items.push({ level: 'check', i, name: col.name, action: 'confirm', text: `Matched by name to source “${key}”. Is it the right column?` })
+      }
+      const warn = mismatch(col, detectedFor(r))
+      if (warn) items.push({ level: 'warn', i, name: col.name, text: warn + '.' })
+    })
+    if (unused.length) {
+      items.push({ level: 'info', i: -1, name: '', action: 'unused',
+        text: `${unused.length} source ${unused.length === 1 ? 'column is' : 'columns are'} not in the output: ${unused.slice(0, 6).map((s) => s.label).join(', ')}${unused.length > 6 ? '…' : ''}` })
+    }
+    const order = { error: 0, warn: 1, check: 2, info: 3 }
+    return items.sort((a, b) => order[a.level] - order[b.level] || a.i - b.i)
+  })
+  const toReview = $derived(review.filter((x) => x.level !== 'info').length)
+  const tab = $derived(chosenTab ?? (toReview ? 'review' : 'output'))
+  // A newly linked target brings the list to the front.
+  $effect(() => { if (reviewKey) chosenTab = 'review' })
+
+  function focusColumn(i) {
+    filter = ''
+    selected = i
+    requestAnimationFrame(() => listEl?.querySelector('tr.selected')?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+  }
+  function confirm(name) { confirmed = new Set([...confirmed, name]) }
+  const checks = $derived(review.filter((x) => x.level === 'check'))
+  function confirmAll() { confirmed = new Set([...confirmed, ...checks.map((x) => x.name)]) }
+
   // The output preview highlights the selected column.
   const highlight = $derived(current && preview?.header ? preview.header.indexOf(current.name) : -1)
   function sourceLabel(r) {
@@ -163,6 +212,7 @@
       <span class="title"><Columns3 size={16} /> Columns</span>
       <span class="badge">{filter ? `${visible.length} of ${cols.length}` : cols.length}</span>
       {#if errors.length}<span class="badge error">{errors.length} {errors.length === 1 ? 'error' : 'errors'}</span>{/if}
+      {#if toReview}<button class="to-review" onclick={() => (chosenTab = 'review')}><ListChecks size={13} /> {toReview} to review</button>{/if}
       <label class="search"><Search size={14} /><input type="search" bind:value={filter} placeholder="Filter columns…" /></label>
       <span class="spacer"></span>
       <button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>
@@ -244,8 +294,20 @@
     {#if current && mapping.columns?.[current.name]}
       <ColumnDetails col={current} r={mapping.columns[current.name]} {issues} detected={detectedFor(mapping.columns[current.name])} />
     {:else if current}
-      <div class="details">
-        <p>This column has no rule yet.</p>
+      <div class="details unmapped">
+        <h2>{current.name} <TypeIcon type={current.type} size={15} /></h2>
+        <div class="issue {current.required ? 'error' : 'warning'}">
+          {current.required ? 'Required by the target, but nothing fills it yet.' : 'In the target, but nothing fills it yet: it will be empty.'}
+        </div>
+        <label>Take its values from a source column
+          <select value="" onchange={(e) => e.target.value && M.setSource(mapping, current.name, sourceOf(e.target.value))}>
+            <option value="">Choose a source column…</option>
+            {#each unused as s}<option value={s.key}>{s.label}</option>{/each}
+            {#if unused.length && unused.length < sources.length}<option disabled>── already used ──</option>{/if}
+            {#each sources.filter((s) => !unused.includes(s)) as s}<option value={s.key}>{s.label}</option>{/each}
+          </select>
+        </label>
+        <p class="muted or">or</p>
         <button onclick={() => (mapping.columns[current.name] = { default: '' })}>Fill it with a default value</button>
       </div>
     {:else}
@@ -255,13 +317,13 @@
 
   <section class="panel bottom">
     <div class="tabs row">
-      <button class:active={tab === 'output'} onclick={() => (tab = 'output')}><Table size={14} /> Output preview {#if preview?.rows}<span class="badge">{preview.rows.length}</span>{/if}</button>
-      <button class:active={tab === 'rejected'} onclick={() => (tab = 'rejected')}><Ban size={14} /> Rejected rows {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
-      <button class:active={tab === 'events'} onclick={() => (tab = 'events')}><MessageSquareWarning size={14} /> Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
+      <button class:active={tab === 'review'} onclick={() => (chosenTab = 'review')}><ListChecks size={14} /> Review {#if toReview}<span class="badge warn">{toReview}</span>{:else}<Check size={13} />{/if}</button>
+      <button class:active={tab === 'output'} onclick={() => (chosenTab = 'output')}><Table size={14} /> Output {#if preview?.rows}<span class="badge">{preview.rows.length}</span>{/if}</button>
+      <button class:active={tab === 'rejected'} onclick={() => (chosenTab = 'rejected')}><Ban size={14} /> Rejected {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
+      <button class:active={tab === 'events'} onclick={() => (chosenTab = 'events')}><MessageSquareWarning size={14} /> Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
       <span class="spacer"></span>
       {#if hasInput}
-        <span class="sample" title={samplePath}><FileSpreadsheet size={14} /> <span class="mono">{samplePath.split(/[\\/]/).pop()}</span></span>
-        <button class="link" onclick={onsample}>Change sample</button>
+        <button class="sample" onclick={onsample} title="Sample file: {samplePath} — click to change"><FileSpreadsheet size={14} /> <span class="mono">{samplePath.split(/[\\/]/).pop()}</span></button>
       {:else}
         <button class="primary" onclick={onsample}><FileSpreadsheet size={14} /> Open a sample CSV to preview</button>
       {/if}
@@ -270,8 +332,34 @@
       <div class="failure"><CircleAlert size={15} /> <span><strong>The preview conversion fails:</strong> {preview.failure}</span></div>
     {/if}
     <div class="tabbody">
-      {#if errors.length}
+      {#if errors.length && tab !== 'review'}
         <div class="pad">{#each errors as i}<div class="issue error">{i.path}: {i.message}</div>{/each}</div>
+      {:else if tab === 'review'}
+        <div class="review">
+          {#if checks.length > 1}
+            <div class="row bulk">
+              <span class="muted">{checks.length} columns were matched by name: check a few, then confirm the rest.</span>
+              <button onclick={confirmAll}><Check size={13} /> Confirm all name matches</button>
+            </div>
+          {/if}
+          {#each review as item}
+            <div class="item {item.level}">
+              <span class="icon">
+                {#if item.level === 'error'}<CircleAlert size={15} />{:else if item.level === 'warn'}<TriangleAlert size={15} />{:else if item.level === 'check'}<CircleHelp size={15} />{:else}<Info size={15} />{/if}
+              </span>
+              {#if item.i >= 0}<button class="link col" onclick={() => focusColumn(item.i)}>#{item.i + 1} {item.name}</button>{/if}
+              <span class="text">{item.text}</span>
+              {#if item.action === 'map'}<button onclick={() => focusColumn(item.i)}><Link size={13} /> Choose a source</button>{/if}
+              {#if item.action === 'confirm'}
+                <button onclick={() => focusColumn(item.i)}>Show</button>
+                <button onclick={() => confirm(item.name)}><Check size={13} /> Looks right</button>
+              {/if}
+              {#if item.action === 'unused'}<button onclick={() => listEl?.querySelector('.unused')?.scrollIntoView({ behavior: 'smooth' })}>Show them</button>{/if}
+            </div>
+          {:else}
+            <p class="all-good"><Check size={16} /> Nothing to review: every output column has a source, types match the data, and the mapping is valid.</p>
+          {/each}
+        </div>
       {:else if tab === 'output'}
         <DataTable header={preview?.header} rows={preview?.rows ?? []} empty="No output rows" {highlight} />
       {:else if tab === 'rejected'}
@@ -314,7 +402,10 @@
   .search { flex-direction: row; align-items: center; gap: 0; margin-left: 8px; position: relative; color: var(--muted); }
   .search :global(svg) { position: absolute; left: 8px; }
   .search input { padding-left: 27px; width: 190px; }
-  th.side-in, td.side-in { background: color-mix(in srgb, var(--soft) 45%, transparent); }
+  /* Header cells are opaque and above the rows scrolling under them. */
+  th { z-index: 2; }
+  th.side-in { background: var(--panel); }
+  td.side-in { background: color-mix(in srgb, var(--soft) 45%, transparent); }
   tr.selected td.side-in { background: var(--soft); }
   .source-cell { display: flex; gap: 6px; align-items: center; min-width: 0; }
   .source-cell select { flex: 1; min-width: 0; }
@@ -335,9 +426,31 @@
   .unused .muted { display: inline-flex; gap: 5px; align-items: center; }
   .chip { display: inline-flex; gap: 3px; align-items: center; }
   .tabs button { display: inline-flex; gap: 5px; align-items: center; }
+  .to-review { display: inline-flex; gap: 4px; align-items: center; border-radius: 12px; padding: 1px 9px; font-size: 12px; background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .review { padding: 8px 12px; display: grid; gap: 5px; }
+  .item { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 7px; background: var(--neutral-soft); }
+  .item .text { flex: 1; }
+  .item button { display: inline-flex; gap: 4px; align-items: center; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
+  .item .col { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 0; white-space: nowrap; }
+  .item .icon { display: inline-flex; }
+  .item.error { background: var(--error-soft); }
+  .item.error .icon { color: var(--error); }
+  .item.warn { background: var(--warn-soft); }
+  .item.warn .icon { color: var(--warn); }
+  .item.check .icon { color: var(--accent); }
+  .item.check { background: var(--soft); }
+  .item.info .icon { color: var(--muted); }
+  .bulk { justify-content: space-between; padding: 2px 2px 4px; font-size: 12px; }
+  .bulk button { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 2px 10px; }
+  .all-good { display: flex; gap: 8px; align-items: center; color: var(--high); padding: 8px 4px; }
+  .unmapped { display: grid; gap: 10px; }
+  .unmapped h2 { display: flex; gap: 6px; align-items: center; }
+  .or { margin: 0; text-align: center; }
   .failure { display: flex; gap: 7px; align-items: flex-start; padding: 7px 12px; background: var(--error-soft); color: var(--error); font-size: 12px; border-bottom: 1px solid var(--line); }
   .failure strong { color: inherit; }
-  .tabs .sample { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); max-width: 240px; overflow: hidden; white-space: nowrap; }
+  .tabs .sample { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); max-width: 210px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tabs .sample:hover { color: var(--accent); }
+  .tabs { flex-wrap: nowrap; overflow: hidden; }
   .tabs button.primary { background: var(--accent); color: var(--accent-text); }
   .source { display: block; padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .source.none { color: var(--muted); font-style: italic; }

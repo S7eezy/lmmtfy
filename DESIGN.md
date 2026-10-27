@@ -459,6 +459,7 @@ Tests build a real converter for every golden case and run it as a separate proc
    - One row per output column, read left to right: source column with its detected type and confidence (coloured), then output name and type. Rows are reordered by dragging (auto-scroll near the edges, arrow keys on the grip), filtered by name, deleted or added; unused source columns can be added back in one click. Built for hundreds of columns.
    - Changing a type picks up the formats and separators detection found for it. A warning shows when the type does not match the data.
    - The selected column's panel: detection (confidence bar, examples, rejected values, notes), how the source is read, value map, how the output is written, invalid values.
+   - **Review** list, first tab, in front whenever something needs a decision: target columns with no source (errors when required), source columns missing from the file, columns matched to a target by name (to confirm one by one or all at once), types that do not match the data, unused source columns. Each item jumps to its column; a target column without source can be given one directly from its panel.
    - Live output preview of the first 100 rows, selected column highlighted, with rejected rows and messages in their own tabs. When the mapping is invalid, the problems replace the preview and Save, Convert and Export are disabled.
 5. **Save** (`Ctrl/⌘+S`), **Convert** a whole file, **Export** converters for any platform. Closing the window with unsaved changes asks first.
 

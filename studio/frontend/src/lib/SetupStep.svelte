@@ -3,7 +3,7 @@
   // columns, so neither is forgotten.
   import { ArrowLeft, ArrowRight } from '@lucide/svelte'
   import SettingsForm from './SettingsForm.svelte'
-  let { mapping = $bindable(), targetPath = $bindable(), sources = [], onback, oncontinue } = $props()
+  let { mapping = $bindable(), targetPath = $bindable(), sources = [], ontarget, onback, oncontinue } = $props()
   const ready = $derived(!!mapping.name?.trim())
   let form = $state(null)
   $effect(() => {
@@ -19,7 +19,7 @@
     <h2>Name the mapping and choose its target</h2>
     <p class="muted">Everything here can be changed later in Settings.</p>
   </div>
-  <SettingsForm bind:mapping bind:targetPath {sources} />
+  <SettingsForm bind:mapping bind:targetPath {sources} {ontarget} />
   <div class="row actions">
     <button onclick={onback}><ArrowLeft size={14} /> Reading settings</button>
     <span class="spacer"></span>

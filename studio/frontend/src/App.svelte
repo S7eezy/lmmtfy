@@ -35,6 +35,14 @@
   let version = $state('')
   let recent = $state([])
   let dropping = $state(false)
+  // Columns a linked target file mapped by name: the editor lists them for
+  // review. reviewKey changes to bring the Review list to the front.
+  let autoMatched = $state([])
+  let reviewKey = $state(0)
+  function targetLinked({ matched }) {
+    autoMatched = matched
+    reviewKey++
+  }
 
   // Compared with sorted keys: removing and re-adding an option moves it
   // in the object without changing the mapping.
@@ -127,6 +135,7 @@
       raw = null
       preview = null
       isNew = true
+      autoMatched = []
       screen = 'read'
       api.remember('csv', path).then(loadRecent)
     } catch (e) { fail(e) }
@@ -156,6 +165,7 @@
       raw = null
       csvPath = ''
       isNew = false
+      autoMatched = []
       screen = 'edit'
       api.remember('mapping', path).then(loadRecent)
       toast('info', `Opened ${fileName(path)}. Open a sample CSV file to preview conversions.`)
@@ -271,9 +281,9 @@
       <ReadStep bind:input={mapping.input} {raw} path={csvPath} notes={detection?.notes ?? []} onredetect={redetect}
         continueLabel={isNew ? 'Next: mapping & target' : 'Back to the columns'} oncontinue={() => (screen = isNew ? 'setup' : 'edit')} />
     {:else if screen === 'setup' && mapping}
-      <SetupStep bind:mapping bind:targetPath {sources} onback={() => (screen = 'read')} oncontinue={() => (screen = 'edit')} />
+      <SetupStep bind:mapping bind:targetPath {sources} ontarget={targetLinked} onback={() => (screen = 'read')} oncontinue={() => (screen = 'edit')} />
     {:else if screen === 'edit' && mapping}
-      <Editor bind:mapping {sources} {detection} {preview} {issues} samplePath={csvPath} onsample={openSample} />
+      <Editor bind:mapping {sources} {detection} {preview} {issues} {autoMatched} {reviewKey} samplePath={csvPath} onsample={openSample} />
     {/if}
   </main>
 </div>
@@ -283,7 +293,7 @@
 {/if}
 
 {#if dialog === 'settings'}
-  <SettingsDialog bind:mapping bind:targetPath {sources} onclose={() => (dialog = null)} />
+  <SettingsDialog bind:mapping bind:targetPath {sources} ontarget={targetLinked} onclose={() => (dialog = null)} />
 {:else if dialog === 'convert'}
   <ConvertDialog {mapping} input={csvPath} onclose={() => (dialog = null)} />
 {:else if dialog === 'export'}
@@ -312,7 +322,6 @@
   .title strong { color: var(--text); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .unsaved { color: var(--warn); font-size: 12px; }
   .divider { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
-  .sample { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); max-width: 220px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   main { flex: 1; min-height: 0; padding: 12px; }
   .home { max-width: 760px; margin: 5vh auto 0; text-align: center; }
   .logo { border-radius: 16px; }

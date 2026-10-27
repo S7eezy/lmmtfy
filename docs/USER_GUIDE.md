@@ -60,7 +60,8 @@ lmmtfy convert examples/acme-orders/input.csv --mapping examples/acme-orders/map
    - **From source column**, or *none* to fill it with a default value (added columns).
    - ↑ ↓ to reorder, 🗑 to delete. Unused source columns are listed below the table: click one to add it.
    - Select a column to see what was detected and to set its options on the right: required, default, empty and missing values, error handling, type options (how values are read and written), value map.
-   - The bottom panel previews the converted first 100 rows, rejected rows and messages. Problems with the mapping replace the preview and mark their column; saving and converting wait until they are fixed.
+   - The **Review** tab lists what needs a decision: target columns with no source, source columns missing from the file, columns matched to a target by name (confirm them, one by one or all at once), types that do not match the data, unused source columns. Click an item to jump to its column.
+   - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
 4. **Settings**: mapping name, where the target is stored, output file format, error strategy, logging.
 5. **Save** writes the mapping (YAML). **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
 

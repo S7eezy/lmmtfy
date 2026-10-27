@@ -7,7 +7,9 @@
   import * as M from './mapping.js'
   import { toast } from './toast.svelte.js'
 
-  let { mapping = $bindable(), targetPath = $bindable(), sources = [] } = $props()
+  // ontarget({ matched }) reports the columns mapped by name when a target
+  // file is linked, so the editor can ask the user to check them.
+  let { mapping = $bindable(), targetPath = $bindable(), sources = [], ontarget = () => {} } = $props()
 
   const out = $derived(mapping.target.inline.output)
   const errs = $derived(mapping.on_error)
@@ -29,22 +31,26 @@
       mapping.columns = {}
       // Keep rules of columns with the same name, and map the others to a
       // source column with a matching name ("Order date" → order_date).
-      let kept = 0, matched = 0
+      const matched = []
       for (const c of t.columns) {
         if (old[c.name]) {
           mapping.columns[c.name] = old[c.name]
-          kept++
+          // The draft named columns after their headers ("Order Date" →
+          // order_date): unless the header is exactly the target name, this
+          // is a guess worth checking.
+          if (M.sourceKey(old[c.name]) !== c.name) matched.push(c.name)
           continue
         }
         const s = sources.find((s) => M.targetName(s.label) === c.name || s.label.toLowerCase() === c.name.toLowerCase())
         if (s) {
           mapping.columns[c.name] = s.index ? { source_index: s.index } : { source: s.name }
-          matched++
+          matched.push(c.name)
         }
       }
       targetPath = path
-      const left = t.columns.length - kept - matched
-      toast(left ? 'info' : 'ok', `Target ${t.name || 'loaded'}: ${t.columns.length} columns, ${kept + matched} mapped by name${left ? `, ${left} still to map` : ''}.`)
+      const left = t.columns.filter((c) => !mapping.columns[c.name]).length
+      ontarget({ matched })
+      toast(left ? 'info' : 'ok', `Target ${t.name || 'loaded'}: ${t.columns.length} columns, ${t.columns.length - left} mapped by name${left ? `, ${left} still to map: see Review` : ''}.`)
     } catch (e) {
       toast('error', String(e))
     }

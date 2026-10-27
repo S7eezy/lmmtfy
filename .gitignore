@@ -31,6 +31,13 @@
 *.syso
 *.app/
 
+# Your own data: a demo/ or data/ folder, and CSV files anywhere except the
+# test suite. Real exports must never be published by accident.
+/demo/
+/data/
+*.csv
+!/testdata/**/*.csv
+
 # Release and download archives
 *.zip
 *.tar.gz
