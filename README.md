@@ -104,6 +104,12 @@ make dist      # portable release archives in dist/release/
 
 `cd studio && go tool wails dev` runs Studio with live reload.
 
+Releases build themselves: push a version tag and GitHub Actions publishes every archive, for every platform, with checksums.
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
 ## How it works
 
 - One Go engine, shared by the CLI, Studio and converters. CSV is read with a streaming tokenizer, rows are converted in parallel and written back in order.

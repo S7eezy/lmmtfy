@@ -519,6 +519,8 @@ Opening a saved mapping goes straight to the columns; a sample CSV can then be o
 
 Archive entries carry a fixed date, so their content alone decides their bytes.
 
+Releases are published by `.github/workflows/release.yml` when a `v*` tag is pushed: a Linux runner checks, smoke-tests and runs `make dist` (CLI for every platform, Studio for Windows and Linux), a macOS runner builds the universal Studio app (`make studio-macos`), and a last job publishes all archives as a GitHub Release with one `SHA256SUMS`. A tag with a suffix (`v1.1.0-rc1`) makes a pre-release.
+
 - **WebView2 on Windows**: preinstalled on Windows 11 and up-to-date Windows 10. Where it is missing and cannot be installed, Microsoft's Fixed Version runtime unpacked in a `webview2` folder next to `lmmtfy-studio.exe` is used without installation (Studio checks for the folder at startup). The runtime itself is not bundled: it is Microsoft's download.
 - **Linux**: Studio needs WebKitGTK, present on standard desktops.
 - **Settings**: Studio's recent files live in the user's config directory (`os.UserConfigDir()/lmmtfy/studio.json`), never next to the executable or in system paths.

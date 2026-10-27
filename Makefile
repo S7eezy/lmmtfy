@@ -19,7 +19,7 @@ DIST      := dist
 HOST_OS   := $(shell $(GO) env GOOS)
 HOST_ARCH := $(shell $(GO) env GOARCH)
 
-.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean studio studio-windows dist
+.PHONY: all help runners build cross test vet fmt fmt-check golden-update smoke check clean studio studio-windows studio-macos dist
 
 all: check build
 
@@ -85,14 +85,18 @@ studio: runners ## Build lmmtfy Studio for this machine into studio/build/bin/
 studio-windows: runners ## Build lmmtfy Studio for Windows (cross-compiled) into studio/build/bin/
 	cd studio && $(GO) tool wails build $(STUDIO_FLAGS) -platform windows/amd64
 
+studio-macos: runners ## Build lmmtfy Studio for macOS (universal) into dist/studio/; on a Mac only
+	cd studio && CGO_ENABLED=1 $(GO) tool wails build $(STUDIO_FLAGS) -platform darwin/universal
+	mkdir -p $(DIST)/studio
+	rm -rf "$(DIST)/studio/lmmtfy Studio.app"
+	cp -R "studio/build/bin/lmmtfy Studio.app" $(DIST)/studio/
+
 dist: cross ## Portable release archives into dist/release/ (CLI for every platform, Studio for Windows and this OS)
 	$(MAKE) studio-windows
 	mkdir -p $(DIST)/studio
 	cp studio/build/bin/lmmtfy-studio.exe $(DIST)/studio/
 ifeq ($(HOST_OS),darwin)
-	cd studio && CGO_ENABLED=1 $(GO) tool wails build $(STUDIO_FLAGS) -platform darwin/universal
-	rm -rf "$(DIST)/studio/lmmtfy Studio.app"
-	cp -R "studio/build/bin/lmmtfy Studio.app" $(DIST)/studio/
+	$(MAKE) studio-macos
 endif
 ifeq ($(HOST_OS),linux)
 	$(MAKE) studio
