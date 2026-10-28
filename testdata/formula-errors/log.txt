@@ -1,0 +1,7 @@
+ERROR line 3, column safe_unit: division by zero (default used)
+ERROR line 3, column unit: division by zero (row rejected)
+ERROR line 4, column total: "abc" is not a decimal number (row rejected)
+summary: ok, 4 rows read, 2 written, 2 rejected, 2 with errors, <duration>
+  unit: 1 error
+  safe_unit: 1 error, 1 defaulted
+  total: 1 error

@@ -66,14 +66,16 @@ type TargetColumn struct {
 
 // Mapping describes how one source format becomes a target.
 type Mapping struct {
-	Version     int             `yaml:"version" json:"version"`
-	Name        string          `yaml:"name" json:"name"`
-	Description string          `yaml:"description,omitempty" json:"description,omitempty"`
-	Target      TargetRef       `yaml:"target" json:"target"`
-	Input       Input           `yaml:"input" json:"input"`
-	OnError     OnError         `yaml:"on_error" json:"on_error"`
-	Logging     Logging         `yaml:"logging" json:"logging"`
-	Columns     map[string]Rule `yaml:"columns" json:"columns"`
+	Version     int               `yaml:"version" json:"version"`
+	Name        string            `yaml:"name" json:"name"`
+	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
+	Target      TargetRef         `yaml:"target" json:"target"`
+	Input       Input             `yaml:"input" json:"input"`
+	OnError     OnError           `yaml:"on_error" json:"on_error"`
+	Logging     Logging           `yaml:"logging" json:"logging"`
+	Group       *Group            `yaml:"group,omitempty" json:"group,omitempty"`
+	Helpers     map[string]Helper `yaml:"helpers,omitempty" json:"helpers,omitempty"`
+	Columns     map[string]Rule   `yaml:"columns" json:"columns"`
 }
 
 // TargetRef is either a path to a target file or an inline target.
@@ -151,16 +153,24 @@ type Logging struct {
 // Rule says how one target column is filled. Parse options describe the
 // source representation.
 type Rule struct {
-	Source       *Scalar  `yaml:"source,omitempty" json:"source,omitempty"`
-	SourceIndex  int      `yaml:"source_index,omitempty" json:"source_index,omitempty"`
-	Optional     bool     `yaml:"optional,omitempty" json:"optional,omitempty"`
-	IfMissing    string   `yaml:"if_missing,omitempty" json:"if_missing,omitempty"`
-	IfEmpty      string   `yaml:"if_empty,omitempty" json:"if_empty,omitempty"`
-	Default      *Scalar  `yaml:"default,omitempty" json:"default,omitempty"`
-	OnError      string   `yaml:"on_error,omitempty" json:"on_error,omitempty"`
-	Map          ValueMap `yaml:"map,omitempty" json:"map,omitempty"`
-	MapUnmatched string   `yaml:"map_unmatched,omitempty" json:"map_unmatched,omitempty"`
-	Trim         *bool    `yaml:"trim,omitempty" json:"trim,omitempty"`
+	Source      *Scalar `yaml:"source,omitempty" json:"source,omitempty"`
+	SourceIndex int     `yaml:"source_index,omitempty" json:"source_index,omitempty"`
+	Optional    bool    `yaml:"optional,omitempty" json:"optional,omitempty"`
+	IfMissing   string  `yaml:"if_missing,omitempty" json:"if_missing,omitempty"`
+	IfEmpty     string  `yaml:"if_empty,omitempty" json:"if_empty,omitempty"`
+	Default     *Scalar `yaml:"default,omitempty" json:"default,omitempty"`
+	// DefaultFormula computes the default once per file, from aggregates
+	// such as lowest([date]); it replaces Default.
+	DefaultFormula string    `yaml:"default_formula,omitempty" json:"default_formula,omitempty"`
+	Formula        string    `yaml:"formula,omitempty" json:"formula,omitempty"`
+	Cases          []Case    `yaml:"cases,omitempty" json:"cases,omitempty"`
+	Else           *Scalar   `yaml:"else,omitempty" json:"else,omitempty"`
+	ElseFormula    string    `yaml:"else_formula,omitempty" json:"else_formula,omitempty"`
+	Sequence       *Sequence `yaml:"sequence,omitempty" json:"sequence,omitempty"`
+	OnError        string    `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+	Map            ValueMap  `yaml:"map,omitempty" json:"map,omitempty"`
+	MapUnmatched   string    `yaml:"map_unmatched,omitempty" json:"map_unmatched,omitempty"`
+	Trim           *bool     `yaml:"trim,omitempty" json:"trim,omitempty"`
 
 	Formats      []string `yaml:"formats,omitempty" json:"formats,omitempty"`
 	DecimalSep   Scalar   `yaml:"decimal_sep,omitempty" json:"decimal_sep,omitempty"`
@@ -170,8 +180,40 @@ type Rule struct {
 	Timezone     string   `yaml:"timezone,omitempty" json:"timezone,omitempty"`
 }
 
+// Case is one condition of a rule's cases: when the formula When is true,
+// the column gets Then (written in the output representation, like a
+// default) or the result of ThenFormula.
+type Case struct {
+	When        string  `yaml:"when" json:"when"`
+	Then        *Scalar `yaml:"then,omitempty" json:"then,omitempty"`
+	ThenFormula string  `yaml:"then_formula,omitempty" json:"then_formula,omitempty"`
+}
+
+// Sequence numbers the written rows: Start, Start+Step, ...
+type Sequence struct {
+	Start *int64 `yaml:"start,omitempty" json:"start,omitempty"` // default 1
+	Step  *int64 `yaml:"step,omitempty" json:"step,omitempty"`   // default 1
+}
+
+// Computed reports whether the rule computes its value instead of reading
+// it: a formula without source, cases or a sequence.
+func (r Rule) Computed() bool {
+	return !r.HasSource() && r.Formula != "" || r.Cases != nil || r.Sequence != nil
+}
+
 // HasSource reports whether the rule reads a source column.
 func (r Rule) HasSource() bool { return r.Source != nil || r.SourceIndex > 0 }
+
+// Helper is a column read and typed like a target column, but never
+// written: formulas refer to it by name. Its values, and its default, use
+// the plain representation of its type (1234.5, 2024-01-31, true).
+type Helper struct {
+	Type string `yaml:"type" json:"type"`
+	Rule `yaml:",inline"`
+}
+
+// Column is the target column a helper stands for: its type, nothing else.
+func (h Helper) Column(name string) TargetColumn { return TargetColumn{Name: name, Type: h.Type} }
 
 // Allowed values of enumerated options. The first one is the default.
 var (

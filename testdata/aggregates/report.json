@@ -1,0 +1,19 @@
+{
+  "mapping": "aggregates",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 5,
+  "rows_written": 4,
+  "rows_rejected": 1,
+  "rows_with_errors": 1,
+  "columns": [
+    {
+      "name": "value",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    }
+  ],
+  "duration_seconds": 0
+}

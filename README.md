@@ -72,6 +72,8 @@ All three run the same engine and produce byte-for-byte identical files.
 
 - **Detection you can trust.** Each column's type comes with how many sampled values fit it, colour-coded in Studio. Columns that are *almost* dates or numbers are flagged, with the values that do not fit.
 - **Built for wide files.** Rename, retype, drop, add columns with defaults, reorder by drag and drop. Comfortable with 250 columns.
+- **Computed columns.** Spreadsheet-like formulas with exact decimals (`value / 1000`, `[first] & " " & [last]`), conditions, row numbers, and values over the whole file (`lowest([date])`, `total([price] * [qty])`). Formulas are checked as you type, with a live view of what they give.
+- **Rows combined.** Several input rows sharing a key become one output row: `price_{n}` fills `price_0` … `price_16` from the rows of a batch, with totals, means and counts per batch. Streams files of any size when batches are contiguous.
 - **Strict by default.** A bad value fails the file, and nothing is written. Or reject bad rows to a reject file, or fall back to defaults; set error thresholds. Optional columns, value maps, required values, patterns, allowed values.
 - **Fast.** Files are streamed and converted on every core: a 1 GB file takes about 7 seconds on a laptop, in about 40 MB of memory.
 - **Made for locked-down production.** Portable archives, no admin rights, no network. A converter cannot be pointed at another mapping, refuses to run if damaged, and reports the checksum of the configuration it embeds.

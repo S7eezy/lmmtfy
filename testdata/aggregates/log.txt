@@ -1,0 +1,11 @@
+INFO  converting <case>/input.csv with mapping aggregates
+INFO  lowest(…) in read_at = 2024-03-01T08:30:00Z
+INFO  first(…) in first_sensor = A
+WARN  total(…) in share: 1 value could not be read and was left out
+INFO  total(…) in share = 28.75
+WARN  mean(…) in above_mean: 1 value could not be read and was left out
+INFO  mean(…) in above_mean = 9.5833333333
+INFO  count(…) in rows = 5
+ERROR line 5, column value: "abc" is not a decimal number (row rejected)
+summary: ok, 5 rows read, 4 written, 1 rejected, 1 with errors, <duration>
+  value: 1 error

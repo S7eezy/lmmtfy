@@ -1,0 +1,4 @@
+ERROR line 11, column price: "abc" is not a decimal number (row rejected)
+summary: ok, 10 rows read in 4 batches, 3 written, 1 rejected, 1 with errors, <duration>
+  object_0: 1 warning
+  price: 1 error

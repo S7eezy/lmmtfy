@@ -1,0 +1,16 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       5 rows (whole file)
+
+  #  column   target   type      ok    details                            examples
+  1  sensor   sensor   string    100%  max 1 char                         "A", "B", "C"
+  2  read_at  read_at  datetime  100%  formats YYYY-MM-DD HH:mm, 1 empty  "2024-03-02 10:00", "2024-03-01 08:30", "2024-03-05 18:00"
+  3  value    value    string    100%  max 4 chars, 1 empty               "12.5", "7", "9.25"
+
+notes:
+  - value: 75% of values read as decimal; rejected: abc

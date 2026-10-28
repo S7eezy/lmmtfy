@@ -1,0 +1,31 @@
+{
+  "mapping": "formula-errors",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 4,
+  "rows_written": 2,
+  "rows_rejected": 2,
+  "rows_with_errors": 2,
+  "columns": [
+    {
+      "name": "unit",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    },
+    {
+      "name": "safe_unit",
+      "errors": 1,
+      "defaulted": 1,
+      "warnings": 0
+    },
+    {
+      "name": "total",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    }
+  ],
+  "duration_seconds": 0
+}

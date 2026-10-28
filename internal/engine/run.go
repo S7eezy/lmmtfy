@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/report"
+	"github.com/S7eezy/lmmtfy/internal/types"
 	"github.com/S7eezy/lmmtfy/internal/version"
 )
 
@@ -48,6 +50,11 @@ type Job struct {
 	MaxRows int
 	// Context stops the conversion when cancelled (Ctrl+C); nil = never.
 	Context context.Context
+	// Trace, when set, records how one column is filled (previews).
+	Trace *Trace
+	// AggregateAll computes aggregates over the whole input even with
+	// MaxRows, which otherwise limits them too.
+	AggregateAll bool
 }
 
 // Run converts job.Input into job.Output. The summary is always returned,
@@ -66,7 +73,7 @@ func (p *Plan) Run(job Job) (*report.Summary, error) {
 		EngineVersion: version.Version,
 		Status:        "ok",
 	}
-	r := &run{plan: p, job: job, sum: sum}
+	r := &run{plan: p, job: job, sum: sum, start: start}
 	err := r.run()
 	sum.Columns = r.columnStats()
 	sum.DurationSeconds = math.Round(time.Since(start).Seconds()*1000) / 1000
@@ -83,27 +90,53 @@ func (p *Plan) Run(job Job) (*report.Summary, error) {
 // active is a column resolved against one input file's header.
 type active struct {
 	*column
-	idx      int  // field index in the input
-	constant bool // no source in this file: every row gets constOut
-	constOut string
+	idx        int  // field index in the input
+	pos        int  // index in the output row, -1 for helpers
+	constant   bool // no source in this file: every row gets constOut
+	constOut   string
+	constEmpty bool // constOut is an empty value
+	absent     bool // source missing, left empty: the formula runs on an empty value
+	// constDefault: constOut is the default, known once the file's
+	// default formulas are computed.
+	constDefault bool
+	defaultOut   *string // this file's default; shadows column.defaultOut
 }
 
 type run struct {
-	plan *Plan
-	job  Job
-	sum  *report.Summary
+	plan  *Plan
+	job   Job
+	sum   *report.Summary
+	start time.Time
 
 	rawHeader []string
 	width     int
-	cols      []*active
-	wopts     csvio.WriterOptions // with Numeric set for the active columns
-	writer    *csvio.Writer
-	rejects   *csvio.Writer
-	stats     map[string]*report.ColumnStats
+	cols      []*active // output columns
+	order     []*active // every column, in evaluation order
+	traced    *active   // the column of job.Trace
+	numbered  bool      // an output column is a sequence: apply formats rows
+	numberer  *csvio.Formatter
+	numberBuf []byte
+
+	byIdx   []int // fields of group.by, when rows are combined
+	helpers []int // ids of the helpers of this input
+
+	inputStart int64               // offset of the input when the job started
+	aggregates []expr.Value        // by slot, from the first pass
+	wopts      csvio.WriterOptions // with Numeric set for the active columns
+	writer     *csvio.Writer
+	rejects    *csvio.Writer
+	stats      map[string]*report.ColumnStats
 }
 
 func (r *run) run() error {
 	p := r.plan
+	if len(p.aggregates) > 0 && p.group == nil {
+		cleanup, err := r.rereadable()
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+	}
 	reader, err := csvio.NewReader(r.job.Input, p.reader)
 	if err != nil {
 		return err
@@ -134,7 +167,37 @@ func (r *run) run() error {
 	if len(res.missingRequired) > 0 {
 		return &FileError{Reason: "required source columns missing from input: " + strings.Join(res.missingRequired, ", ")}
 	}
-	r.cols = res.active
+	r.cols, r.order = res.active, res.order
+	for _, a := range r.order {
+		if a.helper {
+			r.helpers = append(r.helpers, a.id)
+		}
+	}
+	if g := p.group; g != nil {
+		for _, name := range g.by {
+			i := slices.Index(header, name)
+			if i < 0 {
+				return &FileError{Reason: fmt.Sprintf("group.by: source column %q is not in the input", name)}
+			}
+			r.byIdx = append(r.byIdx, i)
+		}
+	}
+	r.numbered = slices.ContainsFunc(r.cols, func(a *active) bool { return a.seq != nil })
+	if t := r.job.Trace; t != nil {
+		for _, a := range r.order {
+			if a.name == t.Column {
+				r.traced = a
+			}
+		}
+	}
+	if len(p.aggregates) > 0 && p.group == nil {
+		if err := r.firstPass(); err != nil {
+			return err
+		}
+	}
+	if err := r.defaults(); err != nil {
+		return err
+	}
 	r.reportMissing(res.missing)
 
 	if err := r.openWriter(); err != nil {
@@ -229,18 +292,18 @@ func (r *run) reportMissing(missing []report.MissingColumn) {
 	var detail strings.Builder
 	for i, m := range missing {
 		names[i] = m.Source
-		fmt.Fprintf(&detail, "\n%s → %s: %s", m.Source, m.Target, missingAction(m, r.plan))
+		fmt.Fprintf(&detail, "\n%s → %s: %s", m.Source, m.Target, r.missingAction(m))
 	}
 	r.job.Log.Warn(report.Event{Message: fmt.Sprintf("configuration has %d optional columns missing from input: %s%s",
 		len(missing), strings.Join(names, ", "), detail.String())})
 }
 
-func missingAction(m report.MissingColumn, p *Plan) string {
+func (r *run) missingAction(m report.MissingColumn) string {
 	switch m.Action {
 	case "default":
-		for _, c := range p.cols {
-			if c.name == m.Target {
-				return fmt.Sprintf("default %q", *c.defaultOut)
+		for _, a := range r.order {
+			if a.name == m.Target {
+				return fmt.Sprintf("default %q", a.fallback(r.plan))
 			}
 		}
 	case "omitted":
@@ -280,18 +343,29 @@ type cellError struct {
 // state, so its effects are the same whatever the number of workers.
 func (r *run) apply(res *rowResult, formatted []byte) error {
 	rec := res.rec
-	r.sum.RowsRead++
+	rows := res.recs // a batch's rows, when rows are combined
+	if rows != nil {
+		r.sum.RowsRead += int64(len(rows))
+		r.sum.Batches++
+	} else {
+		rows = []csvio.Record{rec}
+		r.sum.RowsRead++
+	}
+	if t := res.trace; t != nil && len(r.job.Trace.Rows) < r.job.Trace.Max {
+		t.Line = rec.Line
+		r.job.Trace.Rows = append(r.job.Trace.Rows, *t)
+	}
 	log := r.job.Log
 	if log.Enabled(report.LevelTrace) {
 		log.Trace(report.Event{Line: rec.Line, Message: fmt.Sprintf("%q", rec.Fields)})
 	}
 	if res.rowErr != nil {
-		return r.rowError(rec, []cellError{*res.rowErr})
+		return r.rowError(rows, []cellError{*res.rowErr})
 	}
 
 	var errs []cellError
 	for _, e := range res.events {
-		c := r.cols[e.col]
+		c := e.col
 		switch e.kind {
 		case eventWarning:
 			r.stat(c.name).Warnings++
@@ -312,10 +386,16 @@ func (r *run) apply(res *rowResult, formatted []byte) error {
 		}
 	}
 	if len(errs) > 0 {
-		return r.reject(rec, errs)
+		return r.reject(rows, errs)
 	}
 	if res.writeErr != nil {
-		return r.rowError(rec, []cellError{*res.writeErr})
+		return r.rowError(rows, []cellError{*res.writeErr})
+	}
+	if res.cells != nil {
+		var cellErr *cellError
+		if formatted, cellErr = r.number(res.cells); cellErr != nil {
+			return r.rowError(rows, []cellError{*cellErr})
+		}
 	}
 
 	if err := r.writer.WriteFormatted(formatted); err != nil {
@@ -329,18 +409,53 @@ func (r *run) apply(res *rowResult, formatted []byte) error {
 	return nil
 }
 
+// number fills the sequence columns of a row about to be written, then
+// formats it. Numbers follow written rows: a rejected row takes none.
+func (r *run) number(cells []string) ([]byte, *cellError) {
+	n := r.sum.RowsWritten
+	for _, c := range r.cols {
+		if c.seq == nil {
+			continue
+		}
+		out, err := c.format.Convert(strconv.FormatInt(c.seq.start+c.seq.step*n, 10))
+		if err != nil && !errors.As(err, new(*types.Warning)) {
+			return nil, &cellError{c.name, err.Error()}
+		}
+		cells[c.pos] = out
+	}
+	if r.numberer == nil {
+		r.numberer, _ = csvio.NewFormatter(r.wopts) // options already checked by openWriter
+	}
+	b, err := r.numberer.Append(r.numberBuf[:0], cells)
+	if err != nil {
+		var re *csvio.RowError
+		if !errors.As(err, &re) {
+			re = &csvio.RowError{Field: -1, Msg: err.Error()}
+		}
+		column := ""
+		if re.Field >= 0 {
+			column = r.cols[re.Field].name
+		}
+		return nil, &cellError{column, re.Msg}
+	}
+	r.numberBuf = b
+	return b, nil
+}
+
 // rowError handles an error affecting the whole row, which no default can
 // fix: the row fails the file or is rejected.
-func (r *run) rowError(rec csvio.Record, errs []cellError) error {
+func (r *run) rowError(rows []csvio.Record, errs []cellError) error {
+	rec := rows[0]
 	if r.plan.strategy == "fail_file" {
 		e := errs[0]
 		r.sum.RowsWithErrors++
 		return &FileError{Line: rec.Line, Column: e.column, Reason: e.msg}
 	}
-	return r.reject(rec, errs)
+	return r.reject(rows, errs)
 }
 
-func (r *run) reject(rec csvio.Record, errs []cellError) error {
+func (r *run) reject(rows []csvio.Record, errs []cellError) error {
+	rec := rows[0]
 	r.sum.RowsRejected++
 	r.sum.RowsWithErrors++
 	columns := make([]string, len(errs))
@@ -365,9 +480,13 @@ func (r *run) reject(rec csvio.Record, errs []cellError) error {
 				}
 			}
 		}
-		row := append(slices.Clone(rec.Fields), strconv.Itoa(rec.Line), strings.Join(columns, "; "), strings.Join(msgs, "; "))
-		if err := r.rejects.Write(row); err != nil {
-			return err
+		// Every row of a rejected batch, so the reject file can be fixed
+		// and converted again.
+		for _, rec := range rows {
+			row := append(slices.Clone(rec.Fields), strconv.Itoa(rec.Line), strings.Join(columns, "; "), strings.Join(msgs, "; "))
+			if err := r.rejects.Write(row); err != nil {
+				return err
+			}
 		}
 	}
 	return r.checkMaxErrors()
@@ -385,10 +504,14 @@ func (r *run) checkErrorRate() error {
 	if rate == nil || r.sum.RowsRead == 0 {
 		return nil
 	}
-	actual := float64(r.sum.RowsWithErrors) / float64(r.sum.RowsRead)
+	total, what := r.sum.RowsRead, "rows"
+	if r.plan.group != nil {
+		total, what = r.sum.Batches, "batches" // errors count output rows
+	}
+	actual := float64(r.sum.RowsWithErrors) / float64(total)
 	if actual > *rate {
-		return &FileError{Reason: fmt.Sprintf("%d of %d rows have errors (%.2f%%), more than the allowed %.2f%% (on_error.max_error_rate)",
-			r.sum.RowsWithErrors, r.sum.RowsRead, actual*100, *rate*100)}
+		return &FileError{Reason: fmt.Sprintf("%d of %d %s have errors (%.2f%%), more than the allowed %.2f%% (on_error.max_error_rate)",
+			r.sum.RowsWithErrors, total, what, actual*100, *rate*100)}
 	}
 	return nil
 }
@@ -405,7 +528,7 @@ func (r *run) stat(name string) *report.ColumnStats {
 // columnStats lists stats in output column order.
 func (r *run) columnStats() []report.ColumnStats {
 	var out []report.ColumnStats
-	for _, c := range r.plan.cols {
+	for _, c := range r.plan.nodes {
 		if s, ok := r.stats[c.name]; ok {
 			out = append(out, *s)
 		}
@@ -414,50 +537,163 @@ func (r *run) columnStats() []report.ColumnStats {
 }
 
 // value runs the cell pipeline: trim, null tokens, value map, empty
-// handling, type conversion.
-func (a *active) value(fields []string, p *Plan) (string, error) {
+// handling, type conversion. empty reports an empty value. It is the hot
+// path: computed shares its steps through raw, which this inlines.
+func (a *active) value(fields []string, p *Plan) (out string, empty bool, err error) {
 	if a.constant {
-		return a.constOut, nil
+		return a.constOut, a.constEmpty, nil
 	}
 	raw := fields[a.idx]
 	if a.trim {
 		raw = strings.TrimSpace(raw)
 	}
-	empty := raw == "" || p.nulls[raw]
+	isEmpty := raw == "" || p.nulls[raw]
 
-	if !empty && a.vmap != nil {
+	if !isEmpty && a.vmap != nil {
 		if to, ok := a.vmap[raw]; ok {
 			raw = to
-			empty = raw == ""
+			isEmpty = raw == ""
 		} else {
 			switch a.unmatched {
 			case "error":
-				return "", fmt.Errorf("%q has no entry in the value map", raw)
+				return "", false, fmt.Errorf("%q has no entry in the value map", raw)
 			case "default":
-				return a.fallback(p), nil
+				return a.fallback(p), a.fallbackEmpty(), nil
 			}
 		}
 	}
 
-	if empty {
+	if isEmpty {
 		switch a.ifEmpty {
 		case "default":
-			return *a.defaultOut, nil
+			return a.fallback(p), a.fallbackEmpty(), nil
 		case "error":
-			return "", errors.New("value is empty")
+			return "", false, errors.New("value is empty")
 		}
 		if a.required {
-			return "", errors.New("required value is empty")
+			return "", false, errors.New("required value is empty")
 		}
-		return p.nullOut, nil
+		return p.nullOut, true, nil
 	}
-	return a.conv.Convert(raw)
+	out, err = a.conv.Convert(raw)
+	return out, false, err
+}
+
+// raw extracts the source value of a row, after trimming, null tokens, the
+// value map and empty handling. final is true when that settled the output
+// (a default, an error); otherwise raw is the value to convert, "" when
+// empty.
+func (a *active) raw(fields []string, p *Plan) (raw string, final bool, out string, empty bool, err error) {
+	raw = fields[a.idx]
+	if a.trim {
+		raw = strings.TrimSpace(raw)
+	}
+	isEmpty := raw == "" || p.nulls[raw]
+
+	if !isEmpty && a.vmap != nil {
+		if to, ok := a.vmap[raw]; ok {
+			raw = to
+			isEmpty = raw == ""
+		} else {
+			switch a.unmatched {
+			case "error":
+				return "", true, "", false, fmt.Errorf("%q has no entry in the value map", raw)
+			case "default":
+				return "", true, a.fallback(p), a.fallbackEmpty(), nil
+			}
+		}
+	}
+
+	if isEmpty {
+		switch a.ifEmpty {
+		case "default":
+			return "", true, a.fallback(p), a.fallbackEmpty(), nil
+		case "error":
+			return "", true, "", false, errors.New("value is empty")
+		}
+		return "", false, "", false, nil
+	}
+	return raw, false, "", false, nil
+}
+
+// cased is value for a column with cases: the first true condition gives
+// the value, else the else value, else empty.
+func (a *active) cased(p *Plan, env *expr.Env) (out string, empty bool, err error) {
+	cs := a.cases
+	for i, when := range cs.when {
+		v, err := when.Eval(env)
+		if err != nil {
+			return "", false, err
+		}
+		if v.IsTrue() {
+			return a.outcome(cs.then[i], p, env)
+		}
+	}
+	if cs.otherwise != nil {
+		return a.outcome(*cs.otherwise, p, env)
+	}
+	if a.required {
+		return "", false, errors.New("required value is empty: no case matches, and there is no else")
+	}
+	return p.nullOut, true, nil
+}
+
+func (a *active) outcome(o outcome, p *Plan, env *expr.Env) (string, bool, error) {
+	if o.prog == nil {
+		return o.out, o.empty, nil
+	}
+	return a.result(o.prog, p, env)
+}
+
+// result evaluates a formula and writes its result.
+func (a *active) result(prog *expr.Program, p *Plan, env *expr.Env) (out string, empty bool, err error) {
+	v, err := prog.Eval(env)
+	if err != nil {
+		return "", false, err
+	}
+	if v.IsEmpty() {
+		if a.required {
+			return "", false, errors.New("required value is empty: the formula gave nothing")
+		}
+		return p.nullOut, true, nil
+	}
+	out, err = a.format.Convert(expr.Convert(v, a.typ).Canonical())
+	return out, false, err
+}
+
+// computed is value for a column with a formula. Defaults are final: the
+// formula runs on the parsed source value, an empty one included, or with
+// no value at all for a column without source.
+func (a *active) computed(fields []string, p *Plan, env *expr.Env) (out string, empty bool, err error) {
+	if a.constant {
+		return a.constOut, a.constEmpty, nil
+	}
+	env.Value = expr.Value{}
+	if a.hasSource && !a.absent {
+		raw, final, out, empty, err := a.raw(fields, p)
+		if final || err != nil {
+			return out, empty, err
+		}
+		if raw != "" {
+			canon, err := a.parse.Convert(raw)
+			if err != nil {
+				return "", false, err
+			}
+			if env.Value, err = expr.Parse(a.typ, canon); err != nil {
+				return "", false, err
+			}
+		}
+	}
+
+	return a.result(a.formula, p, env)
 }
 
 // fallback is the value used instead of an error or a missing column.
-func (c *column) fallback(p *Plan) string {
-	if c.defaultOut != nil {
-		return *c.defaultOut
+func (a *active) fallback(p *Plan) string {
+	if a.defaultOut != nil {
+		return *a.defaultOut
 	}
 	return p.nullOut
 }
+
+func (a *active) fallbackEmpty() bool { return a.defaultOut == nil || *a.defaultOut == "" }

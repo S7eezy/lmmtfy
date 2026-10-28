@@ -1,0 +1,11 @@
+primaryKey,batchId,object,price,qty
+3,B1,bolt,0.25,100
+1,B1,nut,0.10,200
+2,B1,washer,0.05,300
+4,B2,gear,12.50,2
+5,B3,spring,1.20,10
+6,B3,axle,8.00,1
+7,B3,pin,0.02,1000
+8,B3,cam,3.40,4
+9,B3,belt,6.00,1
+10,B4,valve,abc,1

@@ -1,0 +1,27 @@
+version: 1
+name: aggregates
+on_error: { strategy: skip_row }
+logging: { level: info }
+target:
+  output: { line_ending: lf }
+  columns:
+    - { name: sensor, type: string }
+    - { name: read_at, type: datetime, format: "YYYY-MM-DD HH:mm" }
+    - { name: value, type: decimal, scale: 2 }
+    - { name: first_sensor, type: string }
+    - { name: share, type: decimal, scale: 4 }
+    - { name: above_mean, type: boolean }
+    - { name: rows, type: integer }
+columns:
+  sensor: { source: sensor }
+  # Empty dates get the earliest date of the column itself.
+  read_at:
+    source: read_at
+    formats: ["YYYY-MM-DD HH:mm"]
+    if_empty: default
+    default_formula: "lowest([read_at])"
+  value: { source: value }
+  first_sensor: { default_formula: "first([sensor])" }
+  share: { formula: "[value] / total([value])" }
+  above_mean: { formula: "[value] > mean([value])" }
+  rows: { default_formula: "count()" }

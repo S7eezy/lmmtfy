@@ -69,7 +69,7 @@ func TestPreviewOutputAndEditing(t *testing.T) {
 	o, _ := Open(acme)
 	m := fromEditor(t, o.Mapping)
 
-	res, err := PreviewOutput(acme, m)
+	res, err := PreviewOutput(acme, m, PreviewOptions{})
 	if err != nil || res.Failure != "" {
 		t.Fatal(err, res.Failure)
 	}
@@ -90,7 +90,7 @@ func TestPreviewOutputAndEditing(t *testing.T) {
 	fr := config.Scalar("FR")
 	m.Columns["country"] = config.Rule{Default: &fr}
 
-	res, _ = PreviewOutput(acme, m)
+	res, _ = PreviewOutput(acme, m, PreviewOptions{})
 	if res.Failure != "" || !slices.Equal(res.Header, []string{"order_id", "date", "montant_ttc", "remarque", "country"}) || res.Rows[2][4] != "FR" {
 		t.Errorf("edited preview: %v %v %q", res.Header, res.Rows, res.Failure)
 	}
@@ -99,7 +99,7 @@ func TestPreviewOutputAndEditing(t *testing.T) {
 	bad := m.Columns["date"]
 	bad.Formats = []string{"DD/MM/2026"}
 	m.Columns["date"] = bad
-	res, _ = PreviewOutput(acme, m)
+	res, _ = PreviewOutput(acme, m, PreviewOptions{})
 	if res.Rows != nil || !slices.ContainsFunc(res.Issues, func(i Issue) bool { return i.Path == "columns.date.formats" }) {
 		t.Errorf("issues = %+v", res.Issues)
 	}
@@ -110,7 +110,7 @@ func TestPreviewShowsRejects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := PreviewOutput("../../testdata/skip-row-rejects/input.csv", fromEditor(t, l.Mapping))
+	res, err := PreviewOutput("../../testdata/skip-row-rejects/input.csv", fromEditor(t, l.Mapping), PreviewOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

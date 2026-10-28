@@ -24,7 +24,7 @@ Messy, heterogeneous CSV files arrive from many sources. A downstream software e
 
 ### Non-goals (v1)
 
-- Expressions / computed columns (concat, split, arithmetic).
+- Expressions / computed columns (concat, split, arithmetic): done in v1.1, see §11.
 - Joins, lookups against other files, multi-file inputs.
 - Non-CSV inputs or outputs (Excel, JSON, databases).
 
@@ -51,6 +51,7 @@ A mapping references a target either by path or inline. A mapping with an inline
 | Reorder | Order of target `columns` list |
 | Add column | Target column with no `source`, filled by `default` |
 | Value mapping | Rule `map` |
+| Computed value (v1.1) | Rule `formula`, `cases`, `sequence` or `default_formula` (§11) |
 
 ## 3. Architecture
 
@@ -325,8 +326,9 @@ Cell pipeline, in order:
 4. Value map (exact match on the raw string; `map_unmatched` decides the rest). Mapped values are still parsed in step 6, so they are written in the input representation. `map_unmatched` without `map` is a configuration error.
 5. Empty handling (`if_empty`).
 6. Parse into the typed value using mapping input options.
-7. Validate against target constraints.
-8. Format to the target's output representation.
+7. Formula, if any (v1.1, §11.2).
+8. Validate against target constraints.
+9. Format to the target's output representation.
 
 Failure at any step → the column's error strategy.
 
@@ -548,10 +550,221 @@ All done; kept as the history of how lmmtfy was built.
 | M4 | Studio: open, preview, editor, save, convert, export | End-to-end flow without touching YAML |
 | M5 | Hardening: performance, docs, portable packaging | Portable archives run without admin rights on all three OS |
 
-## 11. Ideas for later
+## 11. Operations (v1.1)
+
+Status: implemented (M6 to M9). Ships as v1.1, once v1.0 is released.
+
+Operations compute output values instead of copying them: row numbers, formulas, conditions, defaults computed from the whole file, and several input rows combined into one output row.
+
+### 11.1 Filling a column
+
+A rule fills its target column in one of five ways. Studio's column panel shows the choice as **Fill with**:
+
+| Fill with | Rule keys | Example |
+|---|---|---|
+| Source column | `source`, optionally `formula` | `source: "Duration (ms)"`, `formula: "value / 1000"` |
+| Fixed value | `default` | `default: FR` |
+| Row number | `sequence` | `sequence: { start: 1 }` |
+| Conditions | `cases`, `else` | §11.5 |
+| Formula | `formula` | `formula: "[price] * [qty]"` |
+
+`map`, `cases` and `formula` are one family, from exact lookup to anything. Studio offers the simplest that fits, and any of them can be opened as a formula.
+
+Validation: `sequence` and `cases` exclude `source` and `formula`; a `formula` without `source` cannot use `value`.
+
+**Helper columns** are read and typed like columns but never written. A condition or formula on a source column that is not in the output goes through a helper, so formulas never parse raw text themselves:
+
+```yaml
+helpers:
+  temp:
+    source: "Temp °C"
+    type: decimal
+    decimal_sep: ","
+```
+
+A helper is a rule plus a `type`. Helpers and target columns share one namespace; a clash is a validation error. A helper is written nowhere, but has the plain representation of its type (`1234.5`, `2024-01-31`, `2024-01-31T10:00:00` in UTC, `true`), which its `default` uses too. In grouped mode (§11.6), helpers have one value per input row.
+
+### 11.2 Formula language
+
+A small, Excel-flavoured language, implemented in `internal/expr` (lexer, parser, type checker, evaluator) and shared by the CLI, converters and Studio. Existing Go expression libraries compute in float64, which breaks money and unit conversions; formulas use the engine's exact decimals.
+
+| Element | Syntax |
+|---|---|
+| Column | `[order date]`: a target or helper column, typed, **as written**: rounded to its scale, cased, defaulted. A value that must not be altered goes through a helper. `value`: this rule's source value, read as the column's type with the rule's parse options. |
+| Literals | `12`, `1.5`, `"text"`, `true`, `false`, `date("2024-01-31")`, `datetime("2024-01-31T08:00:00Z")` |
+| Arithmetic | `+ - * / %`, unary `-` |
+| Text | `&` joins; an empty value joins as `""` |
+| Comparison | `= <> < <= > >=` |
+| Logic | `and`, `or`, `not` |
+
+Functions (names are case-insensitive):
+
+| Group | Functions |
+|---|---|
+| Logic | `if(cond, a, b)`, `ifs(cond1, a1, cond2, a2, …, else)`, `coalesce(a, b, …)`, `is_empty(x)` |
+| Numbers | `round(x, digits)`, `floor`, `ceil`, `abs`, `min(a, b, …)`, `max(a, b, …)`, `number(text)` |
+| Text | `upper`, `lower`, `trim`, `len`, `left(t, n)`, `right(t, n)`, `mid(t, start, n)`, `replace(t, find, with)`, `pad_left(t, n, char)`, `split_part(t, sep, n)`, `text(x)` |
+| Dates | `add_days`, `add_months`, `days_between(a, b)`, `year`, `month`, `day`, `hour`, `minute`, `from_epoch(x, "s"\|"ms"\|"us")`, `to_epoch(x, unit)`, `today()`, `now()` |
+| Row | `row()`: 1-based data row number in the input file |
+| Aggregates | `first(x)`, `last(x)`, `lowest(x)`, `highest(x)`, `total(x)`, `mean(x)`, `count()`, `count(x)` |
+
+Semantics:
+
+- **Types** are the target types plus empty. Integer and decimal mix into decimal; `/` always gives a decimal, exact to 34 decimal places and rounded by the target column's `scale` and `rounding` when written.
+- **Empty**: an empty cell and the text `""` are the same value. Arithmetic, number and date functions on an empty value return empty; text functions and `&` read it as `""`; `min` and `max` skip it. A comparison with an empty value is false, and an empty condition counts as false.
+- **Defaults are final**: when a default fills the cell (empty source with `if_empty: default`, missing column with `if_missing: default`, unmatched value, `on_error: default`), the formula does not run. It runs on an empty source value otherwise, so `coalesce(value, [other])` works. An empty result is written empty, or is a row error when the column is `required`.
+- **Checked at load**: unknown columns or functions, wrong argument types, and a result type the target column cannot take are validation errors with the position in the formula. Integer widens to decimal and anything converts to string; other mismatches are errors (`value / 1000` into an integer column: "the formula gives a decimal: use round(…)").
+- **Run-time failures** (division by zero, invalid date, overflow) are cell errors handled by the column's `on_error`.
+- After the formula, the target column's constraints and formatting apply as for any value.
+- **Total and deterministic**: no loops, no file or network access, no user-defined functions. `today()` and `now()` are the time the conversion started, the same for every row; Studio marks formulas using them as changing from run to run.
+- **Dependencies**: formulas may reference other columns and are evaluated in dependency order; a cycle is a validation error that names it. When a column fails and rejects the row, formulas reading it are not evaluated: the row has one error, not a cascade.
+- `if(cond, a)` without else gives empty when the condition is false. `row()` is the data row number (1 = first row after the header).
+- **Aggregates** range over the whole file, or over the current batch in grouped mode. Their argument can be a formula (`total([price] * [qty])`) but not another aggregate, nor `value`. Empty and unparsable values are left out (unparsable ones counted in a warning); with no values left, the result is empty (`count` gives 0, `count()` counts rows). `first` and `last` are the first and last values that are not empty. `lowest` and `highest` on text compare alphabetically. `mean` gives a decimal.
+
+The cell pipeline of §5 gains one step: after parsing, the formula runs with `value` bound to the parsed value; validation and formatting follow.
+
+**Studio formula field**: autocomplete for columns, helpers, source columns (picking one creates a helper, typed as most of its values read) and functions with their signature; errors with the offending character highlighted, checked as the formula is typed; the result type; examples (unit conversion, rounding, case, replace, Unix timestamp → datetime through an integer helper); and a live table of the first sample rows: the source value, the columns the formula reads and the result, errors in red.
+
+### 11.3 Row numbers
+
+```yaml
+line_no:
+  sequence: { start: 1, step: 1 }
+```
+
+- Counts **written** rows: a skipped row does not use up a number.
+- Numbers are assigned in the ordered apply stage, so output stays identical whatever the number of workers. Formulas therefore cannot read the sequence; `row()` (the input row number) is available to them.
+- In grouped mode, one number per output row.
+- The target column must be an integer, a decimal or a string.
+
+### 11.4 Defaults computed from the file
+
+```yaml
+start_date:
+  default_formula: 'lowest([reading_date])'
+```
+
+`default_formula` replaces `default` (one or the other) wherever a default is used: no source, `if_empty: default`, `if_missing: default`, `on_error: default`, `map_unmatched: default`. Studio's default field gets a mode: Fixed value, First value of a column, Lowest or earliest of a column, Highest or latest of a column, Formula.
+
+The same aggregates work inside any formula (`[price] / total([price])`).
+
+- Aggregates need a **first pass** over the file before converting. It computes only the columns the aggregates read, in constant memory; reading takes about twice as long. With only `first` aggregates, it stops as soon as each has a value.
+- A default formula reads columns inside aggregates only, so it gives one value per file; `today()` and `now()` are allowed.
+- An aggregate cannot read a column computed from an aggregate: one pass must be enough. A column's own default formula does not count, since the first pass leaves out the cells a default would fill: `read_at` can default to `lowest([read_at])`.
+- Input that cannot be read twice (a pipe) is copied to a temporary file first.
+- Previews limit aggregates to the previewed rows; Studio's **Aggregates: whole file** switch computes them over the whole sample file. Conversions always use the whole file, and log each aggregate's value at level `info`.
+
+### 11.5 Conditions
+
+```yaml
+temp_status:
+  cases:
+    - when: "[temp] > 30"
+      then: HOT
+    - when: "[temp] > 5"
+      then: MILD
+  else: COLD
+```
+
+- `when` is a formula giving a boolean. The first matching case wins.
+- `then` and `else` are values in the output representation, checked at load like defaults; `then_formula` and `else_formula` compute them instead.
+- No match and no `else`: empty, or a row error when the column is `required`.
+- Studio builder: one block per case, `[column] [operator] [value]` (operators: is, is not, <, ≤, >, ≥, is empty, is not empty) then a fixed value or a formula; cases can be reordered; an Otherwise line. A source column picked in the builder becomes a helper. Any other condition (`and`, `or`, functions) is edited as formula text, with the formula field's checks.
+
+### 11.6 Combining rows
+
+Several input rows become one output row. Example: orders by batch, `primaryKey, batchId, object, price, qty` in, one row per batch out with `batchId, object_0, price_0, qt_0, …, object_16, price_16, qt_16, lowest_price, highest_price, total_price, mean_price`.
+
+```yaml
+group:
+  by: [batchId]           # source columns; one output row per batch
+  order_by: [line]        # helpers; default: file order
+  sorted: true            # rows of a batch are next to each other
+  overflow: error         # more rows than slots: error | drop_extra
+helpers:
+  line:  { source: primaryKey, type: integer }
+  price: { source: price, type: decimal }
+  qty:   { source: qty, type: integer }
+columns:
+  batchId:       { source: batchId }
+  "object_{n}":  { source: object }
+  "price_{n}":   { formula: "[price]" }
+  "qt_{n}":      { source: qty }
+  lowest_price:  { formula: "lowest([price])" }
+  highest_price: { formula: "highest([price])" }
+  total_price:   { formula: "total([price] * [qty])" }
+  mean_price:    { formula: "mean([price])" }
+```
+
+- **Batch key**: `by` lists source columns, compared as text after trimming and null tokens. A rule with a plain `source` is allowed only on a key column.
+- **Order**: `order_by` lists helpers, so values sort by type (`10` after `9`). Ascending; ties keep file order.
+- **Slot columns**: a rule key containing `{n}` matches the target columns with a number in that place. The first row of a batch fills the lowest number, so `object_1`…`object_17` works like `object_0`…`object_16`. Every pattern must match the same numbers, which give the slot count; a column matched by both a pattern and a plain key is an error. Inside a slot rule, `value` and column references read that slot's row. Unused slots are empty or get the rule's default; an empty slot in a `required` column is a row error.
+- **Other columns** reduce the batch: outside slots, a reference to per-row data must sit inside an aggregate. A bare reference is a validation error ("[price] has one value per row of a batch: use first, last, lowest, …"). Nothing is picked silently.
+- **Overflow**: `error` makes the batch a row error; `drop_extra` writes the first slots and counts dropped rows in a warning.
+- **Sorted input** (`sorted: true`): batches are built while reading and only one is held in memory. The engine remembers the keys it has seen; a key that comes back fails the file: `batch "42" starts again at line 5000 (first seen at line 10): the file is not sorted by batchId`.
+- **Unsorted input** (`sorted: false`): every batch is held in memory until the end of the file and written in order of first appearance. Memory grows with the file; Studio warns.
+- **What reads what**: helpers are computed for each row of the batch and read only helpers. Aggregates cover every row of the batch (including rows `drop_extra` leaves out of the slots) and read helpers. Columns outside slots read the key, aggregates and other output columns; a default formula cannot use aggregates here.
+- **Errors** apply to the output row. With `skip_row`, the batch is not written and the reject file receives every input row of the batch, each with the error.
+- **Counts**: the summary reports rows read, batches and rows written (`10 rows read in 4 batches, 3 written`); rows written, rejected and with errors count output rows, and so does `max_error_rate`. `row()` outside a slot is the batch's first input row.
+- **Previews** stop after their number of output rows; with unsorted input they read at most 10,000 rows, since a batch may end anywhere.
+
+Studio:
+
+- **Suggestion**: a target with numbered column families (`object_n`, `price_n`, `qt_n`) gets a banner in the editor: "This target repeats 3 columns 17 times. Do several input rows make one output row?" The same entry is in the mapping settings as **Combine rows…**.
+- **Combine dialog**: choose the key with stats from the first 20,000 sample rows ("312 batches, 1 to 14 rows each, next to each other"), the patterns, the order and the overflow behaviour. If the sample is not sorted, the dialog says so and sets `sorted: false`. Each pattern's rule starts from the rule of its first column, or a source named like it (`price_{n}` ← `price`). Stop combining gives each column its own copy of its pattern's rule.
+- **Editor**: each pattern is one row, `price_{n} × 17`, edited once; helpers are listed under the columns; autocomplete offers helpers first.
+- **Preview**: one row per batch.
+
+### 11.7 Engine changes
+
+- Converters split into parse (raw text → typed value) and format (typed value → output text). Columns without operations keep the current direct path; plain mappings must not get slower.
+- Pipeline with operations:
+
+```
+[first pass: aggregates] → read → [build batches] → workers: columns in dependency order
+                                                  → apply: sequence, strategies, counters → write
+```
+
+- Workers receive batches of rows, or of grouped batches, as today; the ordered apply stage keeps output, reject file, logs and summary identical for any number of workers.
+- Converter size is measured on every release; `internal/expr` must stay small. v1.1 converters: 7.2 MB (6.8 MB before operations, linux/amd64).
+- Plain mappings stay on the direct path: within 1.5% of v1.0 speed (BenchmarkRun).
+
+### 11.8 Compatibility
+
+Mappings stay `version: 1`: operations only add keys. A converter embeds its own engine and always understands its mapping; an older CLI reading a mapping with operations fails with an unknown-field error naming the key. v1.0 is released before operations land.
+
+### 11.9 Testing
+
+- Fuzzing of the formula parser: no panic, printing and parsing round-trip.
+- Decimal arithmetic checked against `math/big` on random inputs.
+- Golden cases per operation, run through the engine, the CLI and a built converter.
+- Parallel parity (1 to 8 workers, batches of 1 to 3 rows) extended to sequences, aggregates and combined rows.
+- Combining with a batch size of 1 gives the same output as no grouping.
+
+### 11.10 Milestones
+
+All done.
+
+| # | Scope | Done when |
+|---|---|---|
+| M6 | Typed values, `internal/expr`, `formula`, helpers; Studio formula field | Golden cases pass for transforms and computed columns; plain mappings within 5% of v1.0 speed |
+| M7 | `cases` with the Studio builder, `sequence` | Golden cases pass; sequence identical for 1 to 8 workers |
+| M8 | Aggregates, first pass, `default_formula`; Studio default modes | A GB file with an aggregate converts in constant memory |
+| M9 | Combining rows (sorted and in memory), slots, batch aggregates; Studio combine flow and grouped preview | The batch example of §11.6 is a golden case |
+
+## 12. Ideas for later
 
 - Header matching that ignores case and spacing, as an option.
-- Expressions: concatenate, split, compute columns.
+- Combined rows: expanding an output row in the preview shows the input lines it came from.
+- Condition builder: `and` / `or` within a case, without switching to formula text.
+- Split rows: the reverse of combining rows. One wide row (a timestamp and 20 sensor columns) becomes several rows (one per sensor reading), reusing the `{n}` patterns.
+- Row filter: `keep_rows_when: "[status] <> \"TEST\""` drops rows that are not errors.
+- Explain a cell: click an output cell to see each step from the raw value to the written value.
+- Saved test cases: pin a sample row with its expected output; `validate` replays them, so editing a mapping cannot silently change results.
+- Lookup tables built into the mapping (product code → name), keeping converters offline. The smallest step towards joins.
+- `epoch_s` and `epoch_ms` as date formats, simpler than a formula.
+- Sequences: prefix and padding (`ORD-000001`), and continuing across runs so daily files sent to the same software never reuse numbers.
+- Combining rows: unsorted files beyond memory (batches written to disk), and `overflow: next_row` (extra rows continue on a new output row with the same key).
 - Scientific notation as an output option for decimals.
 - Month names in other languages than English.
 - Check a file against a target: which rows and values do not conform. A target is also a validator, useful to test converted output.

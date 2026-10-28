@@ -1,0 +1,19 @@
+version: 1
+name: formula-errors
+on_error: { strategy: skip_row }
+target:
+  output: { line_ending: lf }
+  columns:
+    - { name: id, type: integer }
+    - { name: unit, type: decimal, scale: 2 }
+    - { name: level, type: string }
+    - { name: safe_unit, type: decimal, scale: 2 }
+helpers:
+  total: { source: total, type: decimal }
+  qty: { source: qty, type: integer }
+columns:
+  id: { source: id }
+  unit: { formula: "[total] / [qty]" }
+  # Not evaluated when [unit] failed: the row has one error, not two.
+  level: { formula: 'if([unit] > 4, "high", "low")' }
+  safe_unit: { formula: "[total] / [qty]", on_error: default, default: "0.00" }

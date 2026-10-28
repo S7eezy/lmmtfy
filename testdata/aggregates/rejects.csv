@@ -1,0 +1,2 @@
+sensor,read_at,value,_line,_column,_error
+C,2024-03-05 18:00,abc,5,value,"""abc"" is not a decimal number"

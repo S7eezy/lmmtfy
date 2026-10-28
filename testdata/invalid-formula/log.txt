@@ -1,0 +1,7 @@
+lmmtfy: <case>/mapping.yaml: invalid configuration:
+  error: columns.id.formula: unknown column [nope] (character 1)
+  error: columns.ratio.formula: the formula gives a decimal number but the column is an integer: use round(…), floor(…) or ceil(…)
+  error: columns.c.formula: value is the source column's value, and this column has no source: refer to columns by name, like [price] (character 7)
+  error: columns.e.formula: unexpected end of formula (character 4)
+  error: columns.d.formula: [d] is this column: use value for its source value
+  error: columns.a.formula: circular reference: [a] → [b] → [a]

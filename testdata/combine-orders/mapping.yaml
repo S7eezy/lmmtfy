@@ -1,0 +1,25 @@
+version: 1
+name: batch-orders
+target: target.yaml
+on_error: { strategy: skip_row }
+group:
+  by: [batchId]
+  order_by: [key]
+  # B3 has 5 rows for 4 slots: its last row is dropped from the slots
+  # (aggregates still cover every row).
+  overflow: drop_extra
+helpers:
+  key: { source: primaryKey, type: integer }
+  price: { source: price, type: decimal }
+  qty: { source: qty, type: integer }
+columns:
+  batchId: { source: batchId }
+  "object_{n}": { source: object }
+  "price_{n}": { formula: "[price]" }
+  "qt_{n}": { source: qty }
+  lowest_price: { formula: "lowest([price])" }
+  highest_price: { formula: "highest([price])" }
+  total_price: { formula: "total([price] * [qty])" }
+  mean_price: { formula: "mean([price])" }
+  lines: { formula: "count()" }
+  line_no: { sequence: {} }

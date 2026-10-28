@@ -1,6 +1,9 @@
 package config
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/goccy/go-yaml"
 )
 
@@ -15,6 +18,8 @@ type document struct {
 	Input       Input         `yaml:"input"`
 	OnError     OnError       `yaml:"on_error"`
 	Logging     Logging       `yaml:"logging,omitempty"`
+	Group       *Group        `yaml:"group,omitempty"`
+	Helpers     yaml.MapSlice `yaml:"helpers,omitempty"`
 	Columns     yaml.MapSlice `yaml:"columns"`
 }
 
@@ -30,15 +35,32 @@ func Format(m *Mapping, targetPath string, opts ...yaml.EncodeOption) ([]byte, e
 		Input:       m.Input,
 		OnError:     m.OnError,
 		Logging:     m.Logging,
+		Group:       m.Group,
 	}
 	if targetPath != "" {
 		doc.Target = targetPath
 	}
+	for _, name := range slices.Sorted(maps.Keys(m.Helpers)) {
+		doc.Helpers = append(doc.Helpers, yaml.MapItem{Key: name, Value: m.Helpers[name]})
+	}
+	// Patterns (price_{n}) come where their first column is.
+	slots, _ := m.Slots()
+	written := map[string]bool{}
 	if t := m.Target.Inline; t != nil {
 		for _, c := range t.Columns {
-			if r, ok := m.Columns[c.Name]; ok {
-				doc.Columns = append(doc.Columns, yaml.MapItem{Key: c.Name, Value: r})
+			key := c.Name
+			if s, ok := slots.Of[c.Name]; ok {
+				key = s.Pattern
 			}
+			if r, ok := m.Columns[key]; ok && !written[key] {
+				doc.Columns = append(doc.Columns, yaml.MapItem{Key: key, Value: r})
+				written[key] = true
+			}
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(m.Columns)) {
+		if IsPattern(key) && !written[key] { // matching nothing: kept, not lost
+			doc.Columns = append(doc.Columns, yaml.MapItem{Key: key, Value: m.Columns[key]})
 		}
 	}
 	return yaml.MarshalWithOptions(doc, append(opts, yaml.UseLiteralStyleIfMultiline(true))...)

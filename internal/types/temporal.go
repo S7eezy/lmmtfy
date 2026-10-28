@@ -16,6 +16,10 @@ var defaultFormats = map[string]string{
 	"time":     "HH:mm:ss",
 }
 
+// DefaultFormat is the format of a date, datetime or time column that sets
+// none.
+func DefaultFormat(kind string) string { return defaultFormats[kind] }
+
 type temporalConv struct {
 	kind          string
 	formats       []string // as written, for error messages

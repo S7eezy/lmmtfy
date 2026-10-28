@@ -1,5 +1,141 @@
 export namespace config {
 	
+	export class Case {
+	    when: string;
+	    then?: string;
+	    then_formula?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Case(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.when = source["when"];
+	        this.then = source["then"];
+	        this.then_formula = source["then_formula"];
+	    }
+	}
+	export class Group {
+	    by: string[];
+	    order_by?: string[];
+	    sorted?: boolean;
+	    overflow?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Group(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.by = source["by"];
+	        this.order_by = source["order_by"];
+	        this.sorted = source["sorted"];
+	        this.overflow = source["overflow"];
+	    }
+	}
+	export class Pair {
+	    from: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Pair(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
+	export class Sequence {
+	    start?: number;
+	    step?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Sequence(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.step = source["step"];
+	    }
+	}
+	export class Helper {
+	    type: string;
+	    source?: string;
+	    source_index?: number;
+	    optional?: boolean;
+	    if_missing?: string;
+	    if_empty?: string;
+	    default?: string;
+	    default_formula?: string;
+	    formula?: string;
+	    cases?: Case[];
+	    else?: string;
+	    else_formula?: string;
+	    sequence?: Sequence;
+	    on_error?: string;
+	    map?: Pair[];
+	    map_unmatched?: string;
+	    trim?: boolean;
+	    formats?: string[];
+	    decimal_sep?: string;
+	    thousands_sep?: string;
+	    true_values?: string[];
+	    false_values?: string[];
+	    timezone?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Helper(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.source = source["source"];
+	        this.source_index = source["source_index"];
+	        this.optional = source["optional"];
+	        this.if_missing = source["if_missing"];
+	        this.if_empty = source["if_empty"];
+	        this.default = source["default"];
+	        this.default_formula = source["default_formula"];
+	        this.formula = source["formula"];
+	        this.cases = this.convertValues(source["cases"], Case);
+	        this.else = source["else"];
+	        this.else_formula = source["else_formula"];
+	        this.sequence = this.convertValues(source["sequence"], Sequence);
+	        this.on_error = source["on_error"];
+	        this.map = this.convertValues(source["map"], Pair);
+	        this.map_unmatched = source["map_unmatched"];
+	        this.trim = source["trim"];
+	        this.formats = source["formats"];
+	        this.decimal_sep = source["decimal_sep"];
+	        this.thousands_sep = source["thousands_sep"];
+	        this.true_values = source["true_values"];
+	        this.false_values = source["false_values"];
+	        this.timezone = source["timezone"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Input {
 	    encoding?: string;
 	    bom?: string;
@@ -56,20 +192,6 @@ export namespace config {
 	        this.summary = source["summary"];
 	    }
 	}
-	export class Pair {
-	    from: string;
-	    to: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Pair(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.from = source["from"];
-	        this.to = source["to"];
-	    }
-	}
 	export class Rule {
 	    source?: string;
 	    source_index?: number;
@@ -77,6 +199,12 @@ export namespace config {
 	    if_missing?: string;
 	    if_empty?: string;
 	    default?: string;
+	    default_formula?: string;
+	    formula?: string;
+	    cases?: Case[];
+	    else?: string;
+	    else_formula?: string;
+	    sequence?: Sequence;
 	    on_error?: string;
 	    map?: Pair[];
 	    map_unmatched?: string;
@@ -100,6 +228,12 @@ export namespace config {
 	        this.if_missing = source["if_missing"];
 	        this.if_empty = source["if_empty"];
 	        this.default = source["default"];
+	        this.default_formula = source["default_formula"];
+	        this.formula = source["formula"];
+	        this.cases = this.convertValues(source["cases"], Case);
+	        this.else = source["else"];
+	        this.else_formula = source["else_formula"];
+	        this.sequence = this.convertValues(source["sequence"], Sequence);
 	        this.on_error = source["on_error"];
 	        this.map = this.convertValues(source["map"], Pair);
 	        this.map_unmatched = source["map_unmatched"];
@@ -302,6 +436,8 @@ export namespace config {
 	    input: Input;
 	    on_error: OnError;
 	    logging: Logging;
+	    group?: Group;
+	    helpers?: Record<string, Helper>;
 	    columns: Record<string, Rule>;
 	
 	    static createFrom(source: any = {}) {
@@ -317,6 +453,8 @@ export namespace config {
 	        this.input = this.convertValues(source["input"], Input);
 	        this.on_error = this.convertValues(source["on_error"], OnError);
 	        this.logging = this.convertValues(source["logging"], Logging);
+	        this.group = this.convertValues(source["group"], Group);
+	        this.helpers = this.convertValues(source["helpers"], Helper, true);
 	        this.columns = this.convertValues(source["columns"], Rule, true);
 	    }
 	
@@ -338,6 +476,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 	
 	
 	
@@ -468,6 +607,88 @@ export namespace detect {
 
 }
 
+export namespace engine {
+	
+	export class TraceInput {
+	    column: string;
+	    value: string;
+	    empty?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TraceInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.value = source["value"];
+	        this.empty = source["empty"];
+	    }
+	}
+	export class TraceRow {
+	    line: number;
+	    value?: string;
+	    inputs?: TraceInput[];
+	    result: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TraceRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.line = source["line"];
+	        this.value = source["value"];
+	        this.inputs = this.convertValues(source["inputs"], TraceInput);
+	        this.result = source["result"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace expr {
+	
+	export class Doc {
+	    name: string;
+	    args: string;
+	    summary: string;
+	    group: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Doc(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.args = source["args"];
+	        this.summary = source["summary"];
+	        this.group = source["group"];
+	    }
+	}
+
+}
+
 export namespace report {
 	
 	export class ColumnStats {
@@ -511,6 +732,7 @@ export namespace report {
 	    status: string;
 	    failure_reason?: string;
 	    rows_read: number;
+	    batches?: number;
 	    rows_written: number;
 	    rows_rejected: number;
 	    rows_with_errors: number;
@@ -530,6 +752,7 @@ export namespace report {
 	        this.status = source["status"];
 	        this.failure_reason = source["failure_reason"];
 	        this.rows_read = source["rows_read"];
+	        this.batches = source["batches"];
 	        this.rows_written = source["rows_written"];
 	        this.rows_rejected = source["rows_rejected"];
 	        this.rows_with_errors = source["rows_with_errors"];
@@ -561,6 +784,28 @@ export namespace report {
 
 export namespace studio {
 	
+	export class BatchStats {
+	    rows: number;
+	    batches: number;
+	    min: number;
+	    max: number;
+	    sorted: boolean;
+	    partial: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rows = source["rows"];
+	        this.batches = source["batches"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	        this.sorted = source["sorted"];
+	        this.partial = source["partial"];
+	    }
+	}
 	export class Event {
 	    level: string;
 	    line?: number;
@@ -577,6 +822,22 @@ export namespace studio {
 	        this.line = source["line"];
 	        this.column = source["column"];
 	        this.message = source["message"];
+	    }
+	}
+	export class FormulaCheck {
+	    type?: string;
+	    error?: string;
+	    pos?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new FormulaCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.error = source["error"];
+	        this.pos = source["pos"];
 	    }
 	}
 	export class Issue {
@@ -679,6 +940,20 @@ export namespace studio {
 	        this.available = source["available"];
 	    }
 	}
+	export class PreviewOptions {
+	    trace?: string;
+	    aggregate_all?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreviewOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.trace = source["trace"];
+	        this.aggregate_all = source["aggregate_all"];
+	    }
+	}
 	export class RawRow {
 	    line: number;
 	    kind: string;
@@ -774,6 +1049,7 @@ export namespace studio {
 	    summary?: report.Summary;
 	    failure?: string;
 	    rejects?: string;
+	    trace?: engine.TraceRow[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Result(source);
@@ -789,6 +1065,7 @@ export namespace studio {
 	        this.summary = this.convertValues(source["summary"], report.Summary);
 	        this.failure = source["failure"];
 	        this.rejects = source["rejects"];
+	        this.trace = this.convertValues(source["trace"], engine.TraceRow);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

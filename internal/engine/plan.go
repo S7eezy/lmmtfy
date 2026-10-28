@@ -3,11 +3,13 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
 	"github.com/S7eezy/lmmtfy/internal/config"
 	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/types"
 )
 
@@ -32,12 +34,24 @@ type Plan struct {
 	maxRate   *float64
 	maxErrors *int
 
-	cols []*column
+	cols  []*column // target columns, in output order
+	nodes []*column // cols then helpers; a column's id is its index here
+	order []int     // ids in evaluation order: formulas after what they read
+
+	aggregates []*expr.Aggregate // by slot
+	passCols   map[int]bool      // columns the first pass computes, for aggregates
+
+	group *groupPlan // nil unless rows are combined
 }
 
-// column is the compiled rule of one target column.
+// column is the compiled rule of one target column, or of a helper.
 type column struct {
+	id        int
+	slot      int // index in its pattern (price_{n}) when rows are combined, else -1
 	name      string
+	path      string // "columns.<name>" or "helpers.<name>", for messages
+	helper    bool
+	typ       expr.Type
 	required  bool
 	numeric   bool
 	hasSource bool
@@ -53,6 +67,20 @@ type column struct {
 
 	conv       types.Converter
 	defaultOut *string // default in its final output form
+
+	// Formulas (see typed.go).
+	formula    *expr.Program
+	parse      types.Converter // source → canonical text, for value
+	format     types.Converter // canonical text → output, with the target constraints
+	back       types.Converter // output → canonical text, when formulas read the column
+	referenced bool
+	cases      *cases
+	seq        *sequence
+	refs       []int // ids of the columns its formulas read, in order of appearance
+
+	defaultFormula *expr.Program     // the default, computed once per file
+	aggs           []*expr.Aggregate // in its default formula, then in its formulas
+	defaultAggs    int               // how many of aggs are in the default formula
 }
 
 // sourceLabel names the source column in messages.
@@ -130,11 +158,35 @@ func Compile(m *config.Mapping) (*Plan, config.Issues) {
 		p.rejects.Escape = csvio.EscapeDouble
 	}
 
+	slots, _ := m.Slots() // problems are reported by config.Validate
 	for _, tc := range t.Columns {
-		if c := compileColumn(&issues, m, tc); c != nil {
-			p.cols = append(p.cols, c)
+		rule, mapped := m.RuleOf(tc.Name, slots)
+		path, slot := "columns."+tc.Name, -1
+		if s, ok := slots.Of[tc.Name]; ok {
+			path, slot = "columns."+s.Pattern, s.Index
 		}
+		c := compileColumn(&issues, m, tc, rule, mapped, path)
+		c.slot = slot
+		p.cols = append(p.cols, c)
 	}
+	p.nodes = slices.Clone(p.cols)
+	for _, name := range slices.Sorted(maps.Keys(m.Helpers)) {
+		h := m.Helpers[name]
+		c := compileColumn(&issues, m, h.Column(name), h.Rule, true, "helpers."+name)
+		c.helper, c.slot = true, -1
+		p.nodes = append(p.nodes, c)
+	}
+	for i, c := range p.nodes {
+		c.id = i
+	}
+	if g := m.Group; g != nil {
+		p.group = &groupPlan{by: g.By, sorted: *g.Sorted, overflow: g.Overflow, slots: len(slots.Numbers)}
+	}
+	p.compileFormulas(&issues)
+	if p.group != nil {
+		p.compileGroup(&issues)
+	}
+	issues = unique(issues) // a pattern's problems, once for all its columns
 
 	if issues.HasErrors() {
 		return nil, issues
@@ -148,10 +200,24 @@ func Compile(m *config.Mapping) (*Plan, config.Issues) {
 	return p, issues
 }
 
-func compileColumn(issues *config.Issues, m *config.Mapping, tc config.TargetColumn) *column {
-	rule, mapped := m.Columns[tc.Name]
+func unique(issues config.Issues) config.Issues {
+	seen := map[config.Issue]bool{}
+	var out config.Issues
+	for _, is := range issues {
+		if !seen[is] {
+			seen[is] = true
+			out = append(out, is)
+		}
+	}
+	return out
+}
+
+func compileColumn(issues *config.Issues, m *config.Mapping, tc config.TargetColumn, rule config.Rule, mapped bool, path string) *column {
+	typ, _ := expr.TypeOf(tc.Type) // empty when unknown: no follow-up errors in formulas
 	c := &column{
 		name:      tc.Name,
+		path:      path,
+		typ:       typ,
 		required:  tc.Required,
 		numeric:   tc.Type == "integer" || tc.Type == "decimal",
 		hasSource: rule.HasSource(),
@@ -179,14 +245,14 @@ func compileColumn(issues *config.Issues, m *config.Mapping, tc config.TargetCol
 	}
 
 	if !slices.Contains(config.Types, tc.Type) {
-		return nil // already reported by config.Validate
+		return c // already reported by config.Validate
 	}
 
 	conv, err := types.New(tc, &rule)
-	addTypeErrors(issues, tc.Name, err)
+	addTypeErrors(issues, path, err)
 	c.conv = conv
 
-	def, defPath := rule.Default, "columns."+tc.Name+".default"
+	def, defPath := rule.Default, path+".default"
 	if def == nil {
 		def, defPath = tc.Default, "target.columns."+tc.Name+".default"
 	}
@@ -217,7 +283,7 @@ func defaultValue(tc config.TargetColumn, def string) (string, error) {
 	return out, nil
 }
 
-func addTypeErrors(issues *config.Issues, column string, err error) {
+func addTypeErrors(issues *config.Issues, path string, err error) {
 	if err == nil {
 		return
 	}
@@ -230,14 +296,14 @@ func addTypeErrors(issues *config.Issues, column string, err error) {
 	for _, e := range list {
 		var oe *types.OptionError
 		if !errors.As(e, &oe) {
-			issues.Errorf("columns."+column, "%v", e)
+			issues.Errorf(path, "%v", e)
 			continue
 		}
 		option := strings.TrimPrefix(oe.Option, "target:")
 		if oe.IsTarget() {
-			issues.Errorf("target.columns."+column+"."+option, "%s", oe.Msg)
+			issues.Errorf("target."+path+"."+option, "%s", oe.Msg)
 		} else {
-			issues.Errorf("columns."+column+"."+option, "%s", oe.Msg)
+			issues.Errorf(path+"."+option, "%s", oe.Msg)
 		}
 	}
 }

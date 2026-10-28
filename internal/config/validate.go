@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -171,11 +172,14 @@ func validateRules(is *Issues, m *Mapping) {
 	for _, c := range t.Columns {
 		byName[c.Name] = c
 	}
+	slots, slotIssues := m.Slots()
+	*is = append(*is, slotIssues...)
+	validateGroup(is, m, slots)
 
 	// Rules naming no target column, sorted for stable output.
 	var unknown []string
 	for name := range m.Columns {
-		if _, ok := byName[name]; !ok {
+		if _, ok := byName[name]; !ok && !IsPattern(name) {
 			unknown = append(unknown, name)
 		}
 	}
@@ -184,9 +188,39 @@ func validateRules(is *Issues, m *Mapping) {
 		is.Errorf("columns."+name, "no target column with this name")
 	}
 
+	for _, name := range slices.Sorted(maps.Keys(m.Helpers)) {
+		path := "helpers." + name
+		h := m.Helpers[name]
+		switch {
+		case strings.TrimSpace(name) == "":
+			is.Errorf("helpers", "a helper needs a name")
+			continue
+		case slices.ContainsFunc(t.Columns, func(c TargetColumn) bool { return c.Name == name }):
+			is.Errorf(path, "a target column has the same name: formulas could not tell them apart")
+		}
+		if h.Type == "" {
+			is.Errorf(path+".type", "required")
+		} else {
+			checkEnum(is, path+".type", h.Type, Types)
+		}
+		if h.IfMissing == "omit" {
+			is.Errorf(path+".if_missing", "omit only applies to output columns")
+		}
+		validateRule(is, path, h.Column(name), h.Rule, m)
+	}
+
+	checked := map[string]bool{}
 	for _, c := range t.Columns {
 		path := "columns." + c.Name
-		r, ok := m.Columns[c.Name]
+		r, ok := m.RuleOf(c.Name, slots)
+		if s, slot := slots.Of[c.Name]; slot {
+			// A pattern's rule is checked once, with its first column.
+			if checked[s.Pattern] {
+				continue
+			}
+			checked[s.Pattern] = true
+			path = "columns." + s.Pattern
+		}
 		if !ok {
 			switch {
 			case c.Default != nil:
@@ -220,15 +254,19 @@ func validateRule(is *Issues, path string, c TargetColumn, r Rule, m *Mapping) {
 		checkEnum(is, path+".on_error", r.OnError, Strategies)
 	}
 
-	hasDefault := r.Default != nil || c.Default != nil
+	hasDefault := r.Default != nil || r.DefaultFormula != "" || c.Default != nil
+	if r.Default != nil && r.DefaultFormula != "" {
+		is.Errorf(path+".default_formula", "default and default_formula are mutually exclusive")
+	}
 	needDefault := func(field, why string) {
 		if !hasDefault {
 			is.Errorf(path+"."+field, "%s requires a default (on the rule or the target column)", why)
 		}
 	}
-	if !r.HasSource() {
-		needDefault("default", "a column without source")
+	if !r.HasSource() && !r.Computed() {
+		needDefault("default", "a column without source or formula")
 	}
+	validateComputed(is, path, r)
 	if r.IfMissing == "default" {
 		needDefault("if_missing", "if_missing: default")
 	}
@@ -248,8 +286,51 @@ func validateRule(is *Issues, path string, c TargetColumn, r Rule, m *Mapping) {
 	if c.Required && r.IfMissing == "empty" {
 		is.Errorf(path+".if_missing", "a required column cannot be left empty when missing")
 	}
-	if r.IfMissing == "omit" {
+	if r.IfMissing == "omit" && strings.HasPrefix(path, "columns.") {
 		is.Warnf(path+".if_missing", "omit removes the column from the output when the source column is missing: the target software may reject files with a different column set")
+	}
+}
+
+// validateComputed checks that a rule fills its column one way only.
+func validateComputed(is *Issues, path string, r Rule) {
+	ways := 0
+	for _, used := range []bool{r.HasSource() || r.Formula != "", r.Cases != nil, r.Sequence != nil} {
+		if used {
+			ways++
+		}
+	}
+	if ways > 1 {
+		is.Errorf(path, "a column is filled one way: a source (with an optional formula), cases or a sequence")
+	}
+
+	if r.Cases != nil {
+		if len(r.Cases) == 0 {
+			is.Errorf(path+".cases", "at least one case is required")
+		}
+		for i, c := range r.Cases {
+			p := fmt.Sprintf("%s.cases[%d]", path, i)
+			if strings.TrimSpace(c.When) == "" {
+				is.Errorf(p+".when", "required")
+			}
+			if (c.Then != nil) == (c.ThenFormula != "") {
+				is.Errorf(p, "needs then or then_formula (one of them)")
+			}
+		}
+	}
+	if r.Cases == nil && (r.Else != nil || r.ElseFormula != "") {
+		is.Errorf(path+".else", "has no effect without cases")
+	}
+	if r.Else != nil && r.ElseFormula != "" {
+		is.Errorf(path+".else", "else and else_formula are mutually exclusive")
+	}
+
+	if s := r.Sequence; s != nil {
+		if strings.HasPrefix(path, "helpers.") {
+			is.Errorf(path+".sequence", "helpers are not written, so they have no row numbers: use row() in a formula")
+		}
+		if s.Step != nil && *s.Step == 0 {
+			is.Errorf(path+".sequence.step", "must not be 0")
+		}
 	}
 }
 

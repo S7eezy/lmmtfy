@@ -1,0 +1,19 @@
+version: 1
+name: invalid-formula
+target:
+  columns:
+    - { name: id, type: integer }
+    - { name: a, type: integer }
+    - { name: b, type: integer }
+    - { name: ratio, type: integer }
+    - { name: c, type: string }
+    - { name: d, type: string }
+    - { name: e, type: integer }
+columns:
+  id: { source: id, formula: "[nope] + 1" }
+  a: { formula: "[b] + 1" }
+  b: { formula: "[a] * 2" }
+  ratio: { source: total, formula: "value / 3" }
+  c: { formula: "upper(value)" }
+  d: { source: qty, formula: '[d] & "x"' }
+  e: { formula: "1 +" }

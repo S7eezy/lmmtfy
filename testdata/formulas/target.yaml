@@ -1,0 +1,15 @@
+version: 1
+name: readings
+output:
+  line_ending: lf
+columns:
+  - { name: line, type: integer }
+  - { name: id, type: integer }
+  - { name: read_at, type: datetime, format: "YYYY-MM-DD HH:mm:ss.SSS" }
+  - { name: duration_s, type: decimal, scale: 3 }
+  - { name: status, type: string }
+  - { name: total, type: decimal, scale: 2 }
+  - { name: price, type: decimal, scale: 2 }
+  - { name: name, type: string, case: upper, max_length: 12 }
+  - { name: sort_key, type: string }
+  - { name: country, type: string }

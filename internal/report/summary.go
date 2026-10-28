@@ -18,7 +18,10 @@ type Summary struct {
 	Status        string `json:"status"` // "ok" or "failed"
 	FailureReason string `json:"failure_reason,omitempty"`
 
-	RowsRead       int64 `json:"rows_read"`
+	RowsRead int64 `json:"rows_read"`
+	// Batches is the number of batches read, when rows are combined. Rows
+	// written, rejected and with errors then count batches (output rows).
+	Batches        int64 `json:"batches,omitempty"`
 	RowsWritten    int64 `json:"rows_written"`
 	RowsRejected   int64 `json:"rows_rejected"`
 	RowsWithErrors int64 `json:"rows_with_errors"`
@@ -53,8 +56,12 @@ func (s *Summary) Text() string {
 		fmt.Fprintf(&b, "summary: failed after %s, no output written, %.2fs\n", plural(s.RowsRead, "row"), s.DurationSeconds)
 		fmt.Fprintf(&b, "  reason: %s\n", s.FailureReason)
 	} else {
-		fmt.Fprintf(&b, "summary: ok, %s read, %d written, %d rejected, %d with errors, %.2fs\n",
-			plural(s.RowsRead, "row"), s.RowsWritten, s.RowsRejected, s.RowsWithErrors, s.DurationSeconds)
+		read := plural(s.RowsRead, "row") + " read"
+		if s.Batches > 0 {
+			read += " in " + plural(s.Batches, "batch")
+		}
+		fmt.Fprintf(&b, "summary: ok, %s, %d written, %d rejected, %d with errors, %.2fs\n",
+			read, s.RowsWritten, s.RowsRejected, s.RowsWithErrors, s.DurationSeconds)
 	}
 	for _, c := range s.Columns {
 		var parts []string
@@ -94,6 +101,9 @@ func (s *Summary) WriteJSON(path string) error {
 func plural(n int64, word string) string {
 	if n == 1 {
 		return "1 " + word
+	}
+	if strings.HasSuffix(word, "ch") {
+		return fmt.Sprintf("%d %ses", n, word)
 	}
 	return fmt.Sprintf("%d %ss", n, word)
 }

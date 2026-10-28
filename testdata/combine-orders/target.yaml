@@ -1,0 +1,23 @@
+version: 1
+name: batch-orders
+output: { line_ending: lf }
+columns:
+  - { name: batchId, type: string, required: true }
+  - { name: object_0, type: string }
+  - { name: price_0, type: decimal, scale: 2 }
+  - { name: qt_0, type: integer }
+  - { name: object_1, type: string }
+  - { name: price_1, type: decimal, scale: 2 }
+  - { name: qt_1, type: integer }
+  - { name: object_2, type: string }
+  - { name: price_2, type: decimal, scale: 2 }
+  - { name: qt_2, type: integer }
+  - { name: object_3, type: string }
+  - { name: price_3, type: decimal, scale: 2 }
+  - { name: qt_3, type: integer }
+  - { name: lowest_price, type: decimal, scale: 2 }
+  - { name: highest_price, type: decimal, scale: 2 }
+  - { name: total_price, type: decimal, scale: 2 }
+  - { name: mean_price, type: decimal, scale: 2 }
+  - { name: lines, type: integer }
+  - { name: line_no, type: integer }

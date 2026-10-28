@@ -1,0 +1,18 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       3 rows (whole file)
+
+  #  column      target      type     ok    details                        examples
+  1  id          id          integer  100%                                 "1", "2", "3"
+  2  ts_ms       ts_ms       integer  100%                                 "1700000000123", "1700000060000", "1700000120500"
+  3  temp        temp        decimal  100%  decimal ",", scale 1, 1 empty  "21,5", "4,2"
+  4  unit_price  unit_price  decimal  100%  decimal ".", scale 3           "10.005", "2.5", "0.333"
+  5  qty         qty         integer  100%  1 empty                        "3", "7"
+  6  first       first       string   100%  max 5 chars                    "Ada", "Alan", "Grace"
+  7  last        last        string   100%  max 8 chars                    "Lovelace", "Turing", "Hopper"
+  8  code        code        string   100%  max 2 chars, 1 empty           "fr", "us"

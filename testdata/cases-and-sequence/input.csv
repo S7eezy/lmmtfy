@@ -1,0 +1,6 @@
+id,temp,status,amount
+1,35,ok,10
+2,12,ok,-3.5
+3,,ok,5
+4,2,bad,abc
+5,-4,bad,7

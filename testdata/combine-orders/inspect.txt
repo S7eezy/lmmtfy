@@ -1,0 +1,18 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       10 rows (whole file)
+
+  #  column      target      type     ok    details      examples
+  1  primaryKey  primarykey  integer  100%               "3", "1", "2"
+  2  batchId     batchid     string   100%  max 2 chars  "B1", "B2", "B3"
+  3  object      object      string   100%  max 6 chars  "bolt", "nut", "washer"
+  4  price       price       string   100%  max 5 chars  "0.25", "0.10", "0.05"
+  5  qty         qty         integer  100%               "100", "200", "300"
+
+notes:
+  - price: 90% of values read as decimal; rejected: abc

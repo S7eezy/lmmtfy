@@ -69,6 +69,9 @@ The home screen has two sides: **mappings** and **targets**, each with its recen
    - With a new or inside target, everything is editable: rename, retype, drag rows to reorder, delete, add columns; unused source columns are listed below the table, click one to add it.
    - With a target file, the output columns are the file's: names, types and order are shown but locked. You choose where each value comes from and how it is read. To change the target itself, use **Edit target…** (see below).
    - Select a column to see what was detected and to set its options on the right: source, empty and missing values, how values are read, value map, default, error handling, and how the value is written (shown read-only for a target file).
+   - **Fill with** chooses how the column gets its values: a **source** column (optionally changed by a formula on its value), a **fixed value**, a **formula**, **conditions** or a **row number**. The formula field completes column and function names (type `[` for columns), checks the formula as you type and points at the error, and shows how it computes the first sample rows; **Examples** inserts common formulas (unit conversion, rounding, Unix timestamps…). Picking a source column in a formula creates a **helper** (listed under the columns): the source read with a type, for formulas only. The condition builder covers comparisons and empty tests; anything else is written as a formula.
+   - A **default** can be a fixed value, or the first, lowest/earliest, highest/latest or last value of a column, or a formula over the whole file. The preview computes such values over its rows; tick **Aggregates: whole file** to use the whole sample file.
+   - **Combine rows** (top of the list) makes one output row from several input rows sharing a key. Studio suggests it when the target repeats numbered columns (`price_0` … `price_16`); the dialog shows the batches the key makes in the sample. Each numbered family then shows as one row, `price_{n} × 17`.
    - The **Review** tab lists what needs a decision: target columns with no source, source columns missing from the file, columns matched to a target by name (confirm them, one by one or all at once), types that do not match the data, rules for a column the target no longer has, unused source columns. Click an item to jump to its column.
    - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
 6. **Save** writes the mapping (YAML), and a new target file with it. **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
@@ -198,6 +201,78 @@ WARN  configuration has 2 optional columns missing from input: Etat, Pays
 ```
 
 `if_missing: omit` changes the set of output columns, which the receiving software may refuse: Studio and `validate` warn about it.
+
+### Computed columns
+
+A column can also be computed: with a formula, conditions, row numbers, or a default computed from the whole file.
+
+```yaml
+helpers:                     # source columns read for formulas, never written
+  temp:  { source: "Temp °C", type: decimal, decimal_sep: "," }
+  ts:    { source: ts_ms, type: integer }
+columns:
+  duration_s: { source: "Duration (ms)", formula: "value / 1000" }   # change the source value
+  read_at:    { formula: 'from_epoch([ts], "ms")' }                    # no source
+  label:      { formula: '[first name] & " " & upper([last name])' }
+  level:
+    cases:                                  # the first true condition wins
+      - { when: "is_empty([temp])", then: UNKNOWN }
+      - { when: "[temp] > 30", then: HOT }
+    else: COLD                              # else_formula: computes it
+  line_no:    { sequence: { start: 1, step: 1 } }   # numbers the written rows
+  start:      { source: start, if_empty: default, default_formula: "lowest([start])" }
+```
+
+| Option | Meaning |
+|---|---|
+| `formula` | with `source`: changes `value`, the source value read as the column's type. Without: computes the column |
+| `cases`, `else` | conditions: `when` is a formula, `then` a value in the output format (`then_formula`: a formula) |
+| `sequence` | row numbers, for written rows only: a rejected row takes none. Formulas cannot read them (`row()` is the input row number) |
+| `default_formula` | the default, computed once per file from aggregates: `first([col])`, `lowest([date])`… Replaces `default` |
+| `helpers` | `name: { source, type, … }`: a source column read with a type, for formulas; not written. Same options as a rule |
+
+**Formulas** look like spreadsheet formulas. `[name]` reads an output column or a helper, as written (rounded, cased); `value` is the column's own source value. Text goes in double quotes (`""` for a quote).
+
+| | |
+|---|---|
+| Operators | `+ - * / %`, `&` joins text, `= <> < <= > >=`, `and or not` |
+| Logic | `if(cond, a, b)`, `ifs(c1, a1, c2, a2, …, else)`, `coalesce(a, b, …)`, `is_empty(x)` |
+| Numbers | `round(x, decimals)`, `floor`, `ceil`, `abs`, `min(…)`, `max(…)`, `number(text)` |
+| Text | `upper`, `lower`, `trim`, `len`, `left(t, n)`, `right(t, n)`, `mid(t, start, n)`, `replace(t, find, with)`, `pad_left(t, n, "0")`, `split_part(t, sep, n)`, `text(x)` |
+| Dates | `date("2024-01-31")`, `datetime(…)`, `add_days`, `add_months`, `days_between(a, b)`, `year`, `month`, `day`, `hour`, `minute`, `from_epoch(x, "s"/"ms"/"us")`, `to_epoch(…)`, `today()`, `now()` |
+| Rows | `row()` |
+| Aggregates | `first`, `last`, `lowest`, `highest`, `total`, `mean`, `count(x)`, `count()`: over the whole file, or the batch when rows are combined |
+
+Numbers are exact (no floating-point rounding). An empty value stays empty through arithmetic, counts as `""` in text, and makes comparisons false. A default, when used, is final: the formula does not run on it. Formulas are checked when the mapping is loaded: unknown columns, wrong types and a result the column cannot take are errors that point at the character. A failing formula (division by zero…) is a bad value, handled by `on_error`.
+
+Aggregates need a first pass over the file before converting it, which takes about twice as long; with only `first(…)`, it stops at the first values.
+
+### Combining rows
+
+Several input rows sharing a key (a **batch**) can make one output row: orders by batch, sensor readings by device…
+
+```yaml
+group:
+  by: [batchId]          # source columns of the key
+  order_by: [line]       # helpers ordering a batch's rows (default: file order)
+  sorted: true           # rows of a batch are next to each other (default)
+  overflow: error        # more rows than slots: error | drop_extra
+helpers:
+  line:  { source: primaryKey, type: integer }
+  price: { source: price, type: decimal }
+  qty:   { source: qty, type: integer }
+columns:
+  batchId:      { source: batchId }          # key columns read the batch's first row
+  "object_{n}": { source: object }           # object_0 ← 1st row, object_1 ← 2nd row…
+  "price_{n}":  { formula: "[price]" }
+  total_price:  { formula: "total([price] * [qty])" }
+  lines:        { formula: "count()" }
+```
+
+- A key `price_{n}` is a pattern: it fills every target column `price_0`, `price_1`, … with the 1st, 2nd, … row of the batch. Patterns must cover the same numbers; columns without a row are empty (or get the rule's default).
+- Outside patterns, a column reads the key, aggregates of the batch (over helpers) or other output columns; reading a helper directly is an error, since a batch has several values.
+- With `sorted: true`, batches stream in constant memory, and a batch that comes back later in the file fails the conversion with both line numbers. With `sorted: false`, batches are held in memory until the end of the file.
+- A bad value rejects the whole batch: every row of it goes to the reject file. The summary counts batches: `10 rows read in 4 batches, 3 written, 1 rejected`.
 
 ### Errors
 

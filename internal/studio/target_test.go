@@ -129,7 +129,7 @@ func TestTargetDefaultFillsColumnsWithoutSource(t *testing.T) {
 		if rule != nil {
 			m.Columns["sensor_name"] = *rule
 		}
-		res, err := PreviewOutput(acme, fromEditor(t, m))
+		res, err := PreviewOutput(acme, fromEditor(t, m), PreviewOptions{})
 		if err != nil || res.Failure != "" || len(res.Rows) == 0 {
 			t.Fatalf("preview: %v %+v", err, res)
 		}

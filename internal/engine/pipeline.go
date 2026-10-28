@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/S7eezy/lmmtfy/internal/csvio"
+	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/types"
 )
 
@@ -30,22 +31,27 @@ import (
 var batchSize = 1024
 
 type batch struct {
-	recs    []csvio.Record
-	results []rowResult
-	out     []byte // formatted output rows, back to back
-	err     error  // read error after the last record of this batch
-	done    chan struct{}
+	recs     []csvio.Record
+	firstRow int      // data row number of recs[0], for row()
+	groups   [][]item // instead of recs when rows are combined: one per output row
+	results  []rowResult
+	out      []byte // formatted output rows, back to back
+	err      error  // read error after the last record of this batch
+	done     chan struct{}
 }
 
 // rowResult is what a worker computes for one row, before any shared state
 // is touched.
 type rowResult struct {
 	rec        csvio.Record
-	events     []event    // in column order
-	rowErr     *cellError // whole-row error (ragged row)
-	writeErr   *cellError // the row cannot be written as configured
+	recs       []csvio.Record // every row of a batch, when rows are combined
+	events     []event        // in column order
+	rowErr     *cellError     // whole-row error (ragged row)
+	writeErr   *cellError     // the row cannot be written as configured
 	defaulted  bool
-	start, end int // formatted row in batch.out
+	trace      *TraceRow // how the traced column was filled
+	cells      []string  // the output row when apply numbers it (sequences)
+	start, end int       // formatted row in batch.out
 }
 
 type eventKind int
@@ -58,7 +64,7 @@ const (
 )
 
 type event struct {
-	col  int
+	col  *active
 	kind eventKind
 	msg  string
 }
@@ -74,18 +80,38 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
-	// Reader.
+	// Reader. send queues a batch for the workers and for apply; false
+	// when the pipeline stopped.
+	send := func(b *batch) bool {
+		select {
+		case ordered <- b:
+		case <-stop:
+			return false
+		}
+		select {
+		case work <- b:
+		case <-stop:
+			close(b.done) // queued but never computed: unblock the drain
+			return false
+		}
+		return true
+	}
 	wg.Go(func() {
 		defer close(work)
 		defer close(ordered)
+		if r.plan.group != nil {
+			r.readBatches(reader, first, send)
+			return
+		}
 		var pending []csvio.Record
 		if first != nil {
 			pending = append(pending, *first)
 		}
 		read := len(pending)
 		limit := r.job.MaxRows
+		rows := 0
 		for {
-			b := &batch{recs: pending, done: make(chan struct{})}
+			b := &batch{recs: pending, firstRow: rows + 1, done: make(chan struct{})}
 			pending = nil
 			for len(b.recs) < batchSize {
 				if limit > 0 && read >= limit {
@@ -101,32 +127,20 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 				}
 				b.recs = append(b.recs, rec)
 			}
+			rows += len(b.recs)
 			last := len(b.recs) < batchSize || limit > 0 && read >= limit
-			select {
-			case ordered <- b:
-			case <-stop:
-				return
-			}
-			select {
-			case work <- b:
-			case <-stop:
-				close(b.done) // queued but never computed: unblock the drain
-				return
-			}
-			if last {
+			if !send(b) || last {
 				return
 			}
 		}
 	})
 
-	// Workers. Each has its own formatter (encoders are stateful) and its own
-	// scratch row.
+	// Workers.
 	for range workers {
 		wg.Go(func() {
-			f, _ := csvio.NewFormatter(r.wopts) // options already checked by openWriter
-			scratch := make([]string, len(r.cols))
+			w := r.newWorker()
 			for b := range work {
-				r.compute(b, f, scratch)
+				r.compute(b, w)
 				close(b.done)
 			}
 		})
@@ -161,18 +175,47 @@ func (r *run) pipeline(reader *csvio.Reader, first *csvio.Record) error {
 	return err
 }
 
+// worker is the scratch state of one worker goroutine.
+type worker struct {
+	f      *csvio.Formatter // its own: encoders are stateful
+	out    []string         // the output row
+	env    expr.Env         // values formulas read, by column id
+	failed []bool           // columns whose value is missing after an error, by id
+	dirty  bool             // failed has entries set
+	aggs   []expr.Value     // a batch's aggregates, reused
+}
+
+func (r *run) newWorker() *worker {
+	f, _ := csvio.NewFormatter(r.wopts) // options already checked by openWriter
+	n := len(r.plan.nodes)
+	return &worker{
+		f:      f,
+		out:    make([]string, len(r.cols)),
+		env:    expr.Env{Columns: make([]expr.Value, n), Aggregates: r.aggregates, Start: r.start},
+		failed: make([]bool, n),
+	}
+}
+
 // compute converts and formats the rows of a batch. It runs on worker
 // goroutines: it only reads the plan and writes to the batch.
-func (r *run) compute(b *batch, f *csvio.Formatter, out []string) {
+func (r *run) compute(b *batch, w *worker) {
+	if b.groups != nil {
+		b.results = make([]rowResult, len(b.groups))
+		for i, items := range b.groups {
+			r.computeGroup(&b.results[i], b, w, items)
+		}
+		return
+	}
 	b.results = make([]rowResult, len(b.recs))
 	for i, rec := range b.recs {
 		res := &b.results[i]
 		res.rec = rec
-		r.computeRow(res, b, f, out)
+		w.env.Row = b.firstRow + i
+		r.computeRow(res, b, w)
 	}
 }
 
-func (r *run) computeRow(res *rowResult, b *batch, f *csvio.Formatter, out []string) {
+func (r *run) computeRow(res *rowResult, b *batch, w *worker) {
 	p := r.plan
 	fields := res.rec.Fields
 	if n := len(fields); n != r.width {
@@ -186,39 +229,118 @@ func (r *run) computeRow(res *rowResult, b *batch, f *csvio.Formatter, out []str
 		}
 	}
 
+	w.reset()
 	rejected := false
-	for i, c := range r.cols {
-		v, err := c.value(fields, p)
-		if err == nil {
-			out[i] = v
-			continue
+	for _, c := range r.order {
+		// The hot path, inline: a plain cell converting without error.
+		// Anything else goes through fill (which converts it again).
+		if !c.computes() && c != r.traced {
+			if v, empty, err := c.value(fields, p); err == nil {
+				if c.pos >= 0 {
+					w.out[c.pos] = v
+				}
+				if !c.referenced || r.store(c, w, v, empty) == nil {
+					continue
+				}
+			}
 		}
+		if r.fill(c, fields, w, res, &rejected) {
+			return
+		}
+	}
+	if !rejected {
+		r.finish(res, b, w)
+	}
+}
+
+// fill computes one column of a row: its output cell and, when formulas
+// read it, its value. Errors follow the column's strategy; stop is true
+// when the file fails (apply stops there).
+func (r *run) fill(c *active, fields []string, w *worker, res *rowResult, rejected *bool) (stop bool) {
+	p := r.plan
+	var (
+		v     string
+		empty bool
+		err   error
+	)
+	switch {
+	case !c.computes():
+		v, empty, err = c.value(fields, p)
+	case c.seq != nil:
+		// Numbered when the row is written, in order (apply).
+		w.out[c.pos] = ""
+		return false
+	case *rejected && r.readsFailed(c, w):
+		// It reads a column whose error already rejects the row: one
+		// error is enough.
+		r.fail(c, w)
+		if c == r.traced {
+			res.trace = &TraceRow{Error: "not computed: a column it reads has an error"}
+		}
+		return false
+	case c.cases != nil:
+		v, empty, err = c.cased(p, &w.env)
+	default:
+		v, empty, err = c.computed(fields, p, &w.env)
+	}
+	if c == r.traced {
+		res.trace = r.traceRow(c, fields, w, v, err)
+	}
+	if err != nil {
 		var warn *types.Warning
 		if errors.As(err, &warn) {
-			out[i] = v
-			res.events = append(res.events, event{i, eventWarning, warn.Msg})
-			continue
-		}
-		switch c.onError {
-		case "fail_file":
-			// Columns after this one are not evaluated: apply stops here.
-			res.events = append(res.events, event{i, eventFail, err.Error()})
-			return
-		case "default":
-			out[i] = c.fallback(p)
-			res.defaulted = true
-			res.events = append(res.events, event{i, eventDefaulted, err.Error()})
-		default:
-			rejected = true
-			res.events = append(res.events, event{i, eventReject, err.Error()})
+			res.events = append(res.events, event{c, eventWarning, warn.Msg})
+			err = nil
 		}
 	}
-	if rejected {
+	if err == nil {
+		if c.pos >= 0 {
+			w.out[c.pos] = v
+		}
+		if !c.referenced {
+			return false
+		}
+		if err = r.store(c, w, v, empty); err == nil {
+			return false
+		}
+	}
+	return r.failCell(c, w, res, err, rejected)
+}
+
+// failCell applies a column's error strategy to an error.
+func (r *run) failCell(c *active, w *worker, res *rowResult, err error, rejected *bool) (stop bool) {
+	switch c.onError {
+	case "fail_file":
+		// Columns after this one are not evaluated: apply stops here.
+		res.events = append(res.events, event{c, eventFail, err.Error()})
+		return true
+	case "default":
+		res.defaulted = true
+		res.events = append(res.events, event{c, eventDefaulted, err.Error()})
+		out, empty := c.fallback(r.plan), c.fallbackEmpty()
+		if c.pos >= 0 {
+			w.out[c.pos] = out
+		}
+		if c.referenced && r.store(c, w, out, empty) != nil {
+			r.fail(c, w)
+		}
+	default:
+		*rejected = true
+		r.fail(c, w)
+		res.events = append(res.events, event{c, eventReject, err.Error()})
+	}
+	return false
+}
+
+// finish formats a computed row, or leaves it to apply when it numbers
+// rows.
+func (r *run) finish(res *rowResult, b *batch, w *worker) {
+	if r.numbered {
+		res.cells = slices.Clone(w.out) // formatted by apply, once numbered
 		return
 	}
-
 	res.start = len(b.out)
-	formatted, err := f.Append(b.out, out)
+	formatted, err := w.f.Append(b.out, w.out)
 	if err != nil {
 		var re *csvio.RowError
 		if !errors.As(err, &re) {
@@ -234,4 +356,30 @@ func (r *run) computeRow(res *rowResult, b *batch, f *csvio.Formatter, out []str
 	}
 	b.out = formatted
 	res.end = len(b.out)
+}
+
+// store keeps the value of a column that formulas read.
+func (r *run) store(c *active, w *worker, out string, empty bool) error {
+	v, err := c.toValue(out, empty)
+	w.env.Columns[c.id] = v
+	return err
+}
+
+func (r *run) readsFailed(c *active, w *worker) bool {
+	return slices.ContainsFunc(c.refs, func(id int) bool { return w.failed[id] })
+}
+
+// reset forgets the failed columns of the previous row.
+func (w *worker) reset() {
+	if w.dirty {
+		clear(w.failed)
+		w.dirty = false
+	}
+}
+
+// fail marks a column as having no value in this row.
+func (r *run) fail(c *active, w *worker) {
+	w.failed[c.id] = true
+	w.env.Columns[c.id] = expr.Value{}
+	w.dirty = true
 }

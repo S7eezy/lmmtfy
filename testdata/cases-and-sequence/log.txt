@@ -1,0 +1,3 @@
+ERROR line 5, column amount: "abc" is not a decimal number (row rejected)
+summary: ok, 5 rows read, 4 written, 1 rejected, 1 with errors, <duration>
+  amount: 1 error

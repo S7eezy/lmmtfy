@@ -154,7 +154,7 @@ func TestValidate(t *testing.T) {
 		{
 			name:    "no source needs default",
 			columns: "id: { source: ID }\n  code: {}\n  country: { source: K }",
-			want:    []string{"error: columns.code.default: a column without source requires a default"},
+			want:    []string{"error: columns.code.default: a column without source or formula requires a default"},
 		},
 		{
 			name:    "omit warns",
@@ -172,6 +172,22 @@ func TestValidate(t *testing.T) {
 			columns: "id: { source: ID }\n  code: { source_index: 2 }\n  country: { source_index: 3 }",
 			extra:   "input: { header: false }\n",
 			want:    []string{"error: columns.id.source: input has no header"},
+		},
+		{
+			name:    "formula needs no default",
+			columns: "id: { source: ID }\n  code: { formula: '[n] & \"x\"' }\n  country: { source: K }",
+			extra:   "helpers:\n  n: { source: N, type: integer }\n",
+		},
+		{
+			name:    "helper problems",
+			columns: "id: { source: ID }\n  code: { source: C }\n  country: { source: K }",
+			extra:   "helpers:\n  code: { source: X, type: string }\n  t: { source: T }\n  o: { source: O, type: date, if_missing: omit }\n  d: { type: integer }\n",
+			want: []string{
+				"error: helpers.code: a target column has the same name",
+				"error: helpers.t.type: required",
+				"error: helpers.o.if_missing: omit only applies to output columns",
+				"error: helpers.d.default: a column without source or formula requires a default",
+			},
 		},
 		{
 			name:    "required default strategy needs default",
@@ -233,8 +249,82 @@ columns:
 	}
 }
 
+func TestHelpersRoundTrip(t *testing.T) {
+	m := load(t, `
+version: 1
+name: m
+target: target.yaml
+helpers:
+  temp: { source: "Temp", type: decimal, decimal_sep: ",", optional: true }
+columns:
+  id: { source: ID }
+  code: { formula: 'if([temp] > 5, "HOT", "COLD")' }
+  country: { source: K }
+`)
+	if h := m.Helpers["temp"]; h.Type != "decimal" || h.DecimalSep != "," || h.IfMissing != "empty" || h.Source.String() != "Temp" {
+		t.Fatalf("helper = %+v", h)
+	}
+	if issues := Validate(m); len(issues) != 0 {
+		t.Fatalf("issues: %v", issues)
+	}
+	for _, format := range []func() ([]byte, error){
+		func() ([]byte, error) { return Marshal(m) },
+		func() ([]byte, error) { return Format(m, "target.yaml") },
+	} {
+		data, err := format()
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := ParseMapping(data)
+		if err != nil {
+			t.Fatalf("%v\n%s", err, data)
+		}
+		if h := back.Helpers["temp"]; h.Type != "decimal" || h.DecimalSep != "," {
+			t.Errorf("helper after round trip = %+v\n%s", h, data)
+		}
+		if f := back.Columns["code"].Formula; f != `if([temp] > 5, "HOT", "COLD")` {
+			t.Errorf("formula after round trip = %q", f)
+		}
+	}
+	if _, err := ParseMapping([]byte("version: 1\nname: m\ntarget: t.yaml\nhelpers:\n  x: { type: integer, typo: 1 }\ncolumns: {}\n")); err == nil {
+		t.Error("unknown helper field accepted")
+	}
+}
+
 func TestMalformedYAMLIsAnErrorNotAPanic(t *testing.T) {
 	if _, err := ParseMapping([]byte("target:\n columns: ! ")); err == nil {
 		t.Error("want an error")
+	}
+}
+
+func TestGroupRoundTrip(t *testing.T) {
+	m, err := LoadMapping("../../testdata/combine-orders/mapping.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := Validate(m); len(issues) != 0 {
+		t.Fatalf("issues: %v", issues)
+	}
+	slots, _ := m.Slots()
+	if len(slots.Numbers) != 4 || slots.Of["price_3"] != (Slot{Pattern: "price_{n}", Index: 3}) {
+		t.Fatalf("slots: %+v", slots)
+	}
+	data, err := Format(m, "target.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ParseMapping(data)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, data)
+	}
+	if back.Group == nil || back.Group.By[0] != "batchId" || back.Group.Overflow != "drop_extra" {
+		t.Errorf("group: %+v\n%s", back.Group, data)
+	}
+	// Patterns are written where their first column is, in target order.
+	if i, j := strings.Index(string(data), "batchId:\n"), strings.Index(string(data), "object_{n}"); i < 0 || j < i {
+		t.Errorf("order:\n%s", data)
+	}
+	if back.Columns["price_{n}"].Formula != "[price]" {
+		t.Errorf("pattern rule lost:\n%s", data)
 	}
 }

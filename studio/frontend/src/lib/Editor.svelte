@@ -10,8 +10,9 @@
   // With a linked target file (locked), the output columns are the file's:
   // names, types and order are shown, not edited, and Edit target opens the
   // target editor. Only how each column is filled belongs to the mapping.
-  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser } from '@lucide/svelte'
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser, Sigma, Combine } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
+  import CombineDialog from './CombineDialog.svelte'
   import ColumnDetails from './ColumnDetails.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
@@ -19,32 +20,65 @@
   import { Reorder } from './reorder.svelte.js'
 
   let { mapping = $bindable(), sources = [], detection = null, preview = null, issues = [], autoMatched = [], reviewKey = 0, samplePath = '', onsample,
-    locked = false, targetFile = '', onedittarget = () => {} } = $props()
+    locked = false, targetFile = '', onedittarget = () => {}, traced = $bindable(''), aggregateAll = $bindable(false) } = $props()
   const hasInput = $derived(!!samplePath)
 
   let selected = $state(0)
+  let selectedHelper = $state(null) // a helper's name, shown instead of the selected column
   let chosenTab = $state(null) // null: Review when something needs attention, else the output
   let filter = $state('')
 
   const cols = $derived(M.columns(mapping))
-  const used = $derived(new Set(cols.map((c) => M.sourceKey(mapping.columns?.[c.name]))))
+  const helpers = $derived(Object.entries(mapping.helpers ?? {}))
+  const used = $derived(new Set([...Object.values(mapping.columns ?? {}).map((r) => M.sourceKey(r)), ...helpers.map(([, h]) => M.sourceKey(h))]))
+  // Combined rows: numbered columns filled by a pattern show as one row,
+  // the pattern's, at the place of its first column.
+  let combining = $state(false)
+  const slots = $derived(M.slotsOf(mapping))
+  const keyOf = (name) => slots.get(name) ?? name // the rule key of a column
+  const firstOf = $derived.by(() => {
+    const seen = new Set(), first = new Set()
+    for (const c of cols) {
+      const p = slots.get(c.name)
+      if (p && !seen.has(p)) { seen.add(p); first.add(c.name) }
+    }
+    return first
+  })
+  const hidden = (name) => slots.has(name) && !firstOf.has(name)
+  const slotCount = (pattern) => cols.filter((c) => slots.get(c.name) === pattern).length
+  const family = $derived(M.families(cols))
   const unused = $derived(sources.filter((s) => !used.has(s.key)))
   const errors = $derived(issues.filter((i) => i.severity === 'error'))
   const byColumn = $derived.by(() => {
     const map = new Map()
-    for (const c of cols) map.set(c.name, M.issuesFor(issues, c.name))
+    for (const c of cols) {
+      const found = M.issuesFor(issues, keyOf(c.name))
+      map.set(c.name, found)
+      map.set(keyOf(c.name), found) // patterns, by their own name too
+    }
     return map
   })
   // Issues of no column; rules for a column the target lacks are in Review.
-  const general = $derived(issues.filter((i) => !cols.some((c) => byColumn.get(c.name)?.includes(i)) &&
+  const general = $derived(issues.filter((i) => !cols.some((c) => byColumn.get(c.name)?.includes(i)) && !i.path.startsWith('helpers.') &&
     !M.orphans(mapping).some((n) => i.path === `columns.${n}` || i.path.startsWith(`columns.${n}.`))))
   const current = $derived(cols[Math.min(selected, cols.length - 1)])
+  const helper = $derived(selectedHelper && mapping.helpers?.[selectedHelper] ? selectedHelper : null)
+  // The column whose formula the preview traces, row by row.
+  $effect(() => {
+    const r = helper ? mapping.helpers[helper] : current && M.ruleOf(mapping, current.name, slots)
+    traced = r?.formula !== undefined || r?.cases ? (helper ?? current.name) : ''
+  })
+  const trace = $derived(preview?.traced && preview.traced === traced ? preview.trace : null)
+  function selectColumn(i) {
+    selected = i
+    selectedHelper = null
+  }
   const visible = $derived.by(() => {
-    const all = cols.map((col, i) => ({ col, i }))
+    const all = cols.map((col, i) => ({ col, i })).filter(({ col }) => !hidden(col.name))
     const q = filter.trim().toLowerCase()
     if (!q) return all
-    return all.filter(({ col }) => col.name.toLowerCase().includes(q) ||
-      M.sourceKey(mapping.columns?.[col.name]).toLowerCase().includes(q))
+    return all.filter(({ col }) => keyOf(col.name).toLowerCase().includes(q) ||
+      M.sourceKey(M.ruleOf(mapping, col.name, slots)).toLowerCase().includes(q))
   })
 
   function detectedFor(r) {
@@ -52,7 +86,12 @@
     return detection.columns.find((c) => (r.source_index ? c.index === r.source_index : c.name === r.source)) ?? null
   }
   function sourceOf(key) { return sources.find((s) => s.key === key) ?? null }
+  // What detection found in a source column (sources, not rules: for the
+  // panels creating helpers from them).
+  const detectSource = (s) => detectedFor(s.index ? { source_index: s.index } : { source: s.name })
   function pickSource(name, key) {
+    const mode = { 'ƒ': 'formula', '⑂': 'cases', '#': 'sequence' }[key]
+    if (mode) return M.setFill(mapping, name, mode, cols.find((c) => c.name === name))
     const s = sourceOf(key)
     M.setSource(mapping, name, s, s && detectedFor(s.index ? { source_index: s.index } : { source: s.name }))
   }
@@ -72,7 +111,9 @@
   const review = $derived.by(() => {
     const items = []
     cols.forEach((col, i) => {
-      const r = mapping.columns?.[col.name]
+      if (hidden(col.name)) return
+      const r = M.ruleOf(mapping, col.name, slots)
+      col = { ...col, name: keyOf(col.name) } // a pattern is reviewed once, by its name
       const key = M.sourceKey(r)
       if (!r) {
         if (col.default !== undefined) {
@@ -101,6 +142,11 @@
       const warn = mismatch(col, detectedFor(r))
       if (warn) items.push({ level: 'warn', i, name: col.name, text: warn + '.' })
     })
+    for (const [name] of helpers) {
+      for (const p of M.issuesFor(issues, name, true).filter((p) => p.severity === 'error')) {
+        items.push({ level: 'error', i: -1, name, action: 'helper', text: `Helper: ${p.message}` })
+      }
+    }
     for (const name of M.orphans(mapping)) {
       items.push({ level: 'error', i: -1, name, action: 'drop',
         text: `A rule fills “${name}”, but the target has no such column (renamed or removed there).` })
@@ -120,6 +166,7 @@
   function focusColumn(i) {
     filter = ''
     selected = i
+    selectedHelper = null
     requestAnimationFrame(() => listEl?.querySelector('tr.selected')?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
   }
   function confirm(name) { confirmed = new Set([...confirmed, name]) }
@@ -132,12 +179,17 @@
   function sourceLabel(r) {
     if (!r) return '— not mapped —'
     const key = M.sourceKey(r)
+    if (!key && r.cases) return `⑂ ${r.cases.length} ${r.cases.length === 1 ? 'condition' : 'conditions'}`
+    if (!key && r.sequence) return `# ${r.sequence.start ?? 1}, ${(r.sequence.start ?? 1) + (r.sequence.step ?? 1)}, …`
+    if (!key && r.formula !== undefined) return `ƒ ${r.formula || '…'}`
+    if (!key && r.default_formula !== undefined) return `= ${r.default_formula || '…'}`
     if (!key) return '— none: default value —'
+    if (r.formula) return `${sourceOf(key) || !sources.length ? key : `${key} (not in this file)`} · ƒ`
     return sourceOf(key) || !sources.length ? key : `${key} (not in this file)`
   }
 
   function addFrom(source) {
-    selected = M.add(mapping, source)
+    selectColumn(M.add(mapping, source))
     filter = ''
     requestAnimationFrame(() => listEl?.querySelector('tr.selected')?.scrollIntoView({ block: 'nearest' }))
   }
@@ -165,8 +217,22 @@
       {#if toReview}<button class="to-review" onclick={() => (chosenTab = 'review')}><ListChecks size={13} /> {toReview} to review</button>{/if}
       <label class="search"><Search size={14} /><input type="search" bind:value={filter} placeholder="Filter columns…" /></label>
       <span class="spacer"></span>
+      <button onclick={() => (combining = true)} title="Several input rows make one output row"><Combine size={14} /> {mapping.group ? 'Combined rows' : 'Combine rows'}</button>
       {#if !locked}<button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>{/if}
     </div>
+    {#if mapping.group}
+      <div class="locked row combined">
+        <Combine size={14} />
+        <span>One output row per batch of <strong>{mapping.group.by.join(', ')}</strong>{#if slots.size}; numbered columns take the 1st, 2nd, … row of the batch{/if}.</span>
+      </div>
+    {:else if family.patterns.length >= 1 && family.numbers.length >= 2}
+      <div class="locked row suggest">
+        <Combine size={14} />
+        <span>This target repeats {family.patterns.length === 1 ? 'a column' : `${family.patterns.length} columns`} {family.numbers.length} times ({family.patterns.join(', ')}). Do several input rows make one output row?</span>
+        <span class="spacer"></span>
+        <button onclick={() => (combining = true)}>Combine rows…</button>
+      </div>
+    {/if}
     {#if locked}
       <div class="locked row">
         <Lock size={14} />
@@ -187,13 +253,14 @@
         </thead>
         <tbody bind:this={bodyEl}>
           {#each visible as { col, i } (col)}
-            {@const r = mapping.columns?.[col.name]}
+            {@const pattern = slots.get(col.name)}
+            {@const r = M.ruleOf(mapping, col.name, slots)}
             {@const problems = byColumn.get(col.name) ?? []}
             {@const d = detectedFor(r)}
             {@const warn = mismatch(col, d)}
-            <tr class="{reorder.dropClass(i)}" class:selected={i === selected} class:moving={reorder.drag?.from === i} onclick={() => (selected = i)}>
+            <tr class="{reorder.dropClass(i)}" class:selected={i === selected && !helper} class:moving={reorder.drag?.from === i} onclick={() => selectColumn(i)}>
               <td class="grip-col">
-                {#if !locked}
+                {#if !locked && !pattern}
                   <button class="grip" class:disabled={!!filter} tabindex={filter ? -1 : 0}
                     title={filter ? 'Clear the filter to reorder' : 'Drag to reorder (or arrow keys)'} aria-label="Reorder {col.name}"
                     onpointerdown={(e) => reorder.start(e, i)} onpointermove={reorder.move} onpointerup={reorder.end} onpointercancel={reorder.end}
@@ -203,28 +270,32 @@
               <td class="num muted">{i + 1}</td>
               <td class="side-in">
                 <div class="source-cell">
-                  {#if i === selected}
-                    <select value={r ? M.sourceKey(r) : '-'} onchange={(e) => pickSource(col.name, e.target.value)}>
+                  {#if i === selected && !helper}
+                    <select value={r ? ({ formula: 'ƒ', cases: '⑂', sequence: '#' }[M.fillMode(r)] ?? M.sourceKey(r)) : '-'} onchange={(e) => pickSource(keyOf(col.name), e.target.value)}>
                       {#if !r}<option value="-" disabled>— not mapped —</option>{/if}
                       <option value="">— none: default value —</option>
+                      <option value="ƒ">ƒ formula</option>
+                      <option value="⑂">⑂ conditions</option>
+                      <option value="#"># row number</option>
                       {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
                       {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)}{sources.length ? ' (not in this file)' : ''}</option>{/if}
                     </select>
                   {:else}
-                    <span class="source" class:none={!M.sourceKey(r)}>{sourceLabel(r)}</span>
+                    <span class="source" class:none={M.fillMode(r) === 'fixed' && r?.default_formula === undefined} class:formula={!M.sourceKey(r) && (M.fillMode(r) !== 'fixed' || r?.default_formula !== undefined)} title={r?.formula ?? ''}>{sourceLabel(r)}</span>
                   {/if}
                   {#if d}<ConfidenceBadge detected={d} compact />{/if}
                 </div>
               </td>
               <td class="arrow"><ArrowRight size={14} /></td>
               <td>
-                {#if locked}<span class="fixed" title={col.name}>{col.name}{#if col.required}<span class="required-mark" title="Required"> *</span>{/if}</span>
+                {#if pattern}<span class="fixed pattern" title="Filled for each slot: {slotCount(pattern)} columns">{pattern} <span class="badge">× {slotCount(pattern)}</span></span>
+                {:else if locked}<span class="fixed" title={col.name}>{col.name}{#if col.required}<span class="required-mark" title="Required"> *</span>{/if}</span>
                 {:else}<input value={col.name} onchange={(e) => { if (!M.rename(mapping, i, e.target.value.trim())) e.target.value = col.name }} />{/if}
               </td>
               <td>
                 <div class="type-cell">
                   <TypeIcon type={col.type} />
-                  {#if locked}<span class="fixed">{col.type}</span>
+                  {#if locked || pattern}<span class="fixed">{col.type}</span>
                   {:else}
                     <select value={col.type} onchange={(e) => M.setType(mapping, i, e.target.value, d)}>
                       {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
@@ -236,13 +307,29 @@
               <td class="status">
                 {#if problems.some((p) => p.severity === 'error')}<span class="state error" title={problems.map((p) => p.message).join('\n')}><CircleAlert size={15} /></span>
                 {:else if problems.length}<span class="state warn" title={problems.map((p) => p.message).join('\n')}><TriangleAlert size={15} /></span>{/if}
-                {#if !locked}<button class="icon delete" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column"><Trash2 size={14} /></button>{/if}
+                {#if !locked && !pattern}<button class="icon delete" onclick={(e) => { e.stopPropagation(); remove(i) }} aria-label="Delete column" title="Delete column"><Trash2 size={14} /></button>{/if}
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
       {#if filter && visible.length === 0}<p class="muted pad">No column matches “{filter}”.</p>{/if}
+      {#if helpers.length && !filter}
+        <div class="helpers">
+          <div class="helpers-head muted"><Sigma size={13} /> Helper columns: read for formulas, not written</div>
+          {#each helpers as [name, h] (name)}
+            {@const problems = M.issuesFor(issues, name, true)}
+            <button class="helper" class:selected={helper === name} onclick={() => (selectedHelper = name)}>
+              <span class="mono">{M.sourceKey(h) || (h.formula !== undefined ? 'ƒ' : '—')}</span>
+              <ArrowRight size={12} />
+              <span class="name">{name}</span>
+              <TypeIcon type={h.type} />
+              {#if problems.some((p) => p.severity === 'error')}<span class="state error" title={problems.map((p) => p.message).join('\n')}><CircleAlert size={14} /></span>
+              {:else if problems.length}<span class="state warn" title={problems.map((p) => p.message).join('\n')}><TriangleAlert size={14} /></span>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if unused.length && !filter}
         <div class="unused">
           {#if locked}
@@ -258,14 +345,23 @@
     </div>
   </section>
 
+  {#if combining}
+    <CombineDialog {mapping} {sources} {samplePath} detectedFor={detectSource} onclose={() => (combining = false)} />
+  {/if}
+
   {#if reorder.drag}
     {@const drag = reorder.drag}
     <div class="ghost" style="left: {drag.x + 14}px; top: {drag.y - 12}px">⠿ {cols[drag.from]?.name} → position {drag.to + 1}</div>
   {/if}
 
   <aside class="panel side scroll">
-    {#if current && mapping.columns?.[current.name]}
-      <ColumnDetails col={current} r={mapping.columns[current.name]} {issues} detected={detectedFor(mapping.columns[current.name])} {locked} />
+    {#if helper}
+      {@const h = mapping.helpers[helper]}
+      <ColumnDetails col={{ name: helper, type: h.type }} r={h} {mapping} {issues} detected={detectedFor(h)} helper {sources} detectedFor={detectSource} {trace}
+        onremove={() => { M.removeHelper(mapping, helper); selectedHelper = null }} />
+    {:else if current && M.ruleOf(mapping, current.name, slots)}
+      {@const r = M.ruleOf(mapping, current.name, slots)}
+      <ColumnDetails col={{ ...current, name: keyOf(current.name) }} {r} {mapping} {issues} detected={detectedFor(r)} {locked} {sources} detectedFor={detectSource} {trace} />
     {:else if current}
       <div class="details unmapped">
         <h2>{current.name} <TypeIcon type={current.type} size={15} /></h2>
@@ -287,6 +383,12 @@
         <p class="muted or">or</p>
         <button onclick={() => (mapping.columns[current.name] = current.default !== undefined ? {} : { default: '' })}>
           {current.default !== undefined ? 'Set a default of this mapping' : 'Fill it with a default value'}</button>
+        <p class="muted or">or compute it</p>
+        <div class="compute row">
+          <button onclick={() => M.setFill(mapping, current.name, 'formula', current)}><Sigma size={13} /> Formula</button>
+          <button onclick={() => M.setFill(mapping, current.name, 'cases', current)}>⑂ Conditions</button>
+          <button onclick={() => M.setFill(mapping, current.name, 'sequence', current)}># Row number</button>
+        </div>
       </div>
     {:else}
       <p class="muted pad">Add a column to start.</p>
@@ -300,6 +402,11 @@
       <button class:active={tab === 'rejected'} onclick={() => (chosenTab = 'rejected')}><Ban size={14} /> Rejected {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
       <button class:active={tab === 'events'} onclick={() => (chosenTab = 'events')}><MessageSquareWarning size={14} /> Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
       <span class="spacer"></span>
+      {#if hasInput && !mapping.group && M.usesAggregates(mapping)}
+        <label class="inline whole" title="Aggregates (lowest, total, …) cover the previewed rows unless this is on. Conversions always use the whole file.">
+          <input type="checkbox" bind:checked={aggregateAll} /> Aggregates: whole file
+        </label>
+      {/if}
       {#if hasInput}
         <button class="sample" onclick={onsample} title="Sample file: {samplePath} — click to change"><FileSpreadsheet size={14} /> <span class="mono">{samplePath.split(/[\\/]/).pop()}</span></button>
       {:else}
@@ -335,6 +442,7 @@
               {/if}
               {#if item.action === 'targetdefault'}<button onclick={() => delete mapping.columns[item.name].default}>Use the target default</button>{/if}
               {#if item.action === 'drop'}<button onclick={() => dropRule(item.name)}><Eraser size={13} /> Remove the rule</button>{/if}
+              {#if item.action === 'helper'}<button onclick={() => (selectedHelper = item.name)}>Show</button>{/if}
               {#if item.action === 'unused'}<button onclick={() => listEl?.querySelector('.unused')?.scrollIntoView({ behavior: 'smooth' })}>Show them</button>{/if}
             </div>
           {:else}
@@ -409,6 +517,10 @@
   .locked { gap: 7px; padding: 6px 12px; font-size: 12px; background: var(--neutral-soft); border-bottom: 1px solid var(--line); color: var(--muted); }
   .locked strong { color: var(--text); }
   .locked button { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 2px 10px; }
+  .pattern { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .pattern .badge { font-family: var(--font); }
+  .suggest { background: var(--soft); color: var(--accent); }
+  .combined { background: var(--soft); }
   .fixed { display: block; padding: 2px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
   .chip { display: inline-flex; gap: 3px; align-items: center; }
   .tabs button { display: inline-flex; gap: 5px; align-items: center; }
@@ -432,14 +544,24 @@
   .unmapped { display: grid; gap: 10px; }
   .unmapped h2 { display: flex; gap: 6px; align-items: center; }
   .or { margin: 0; text-align: center; }
+  .compute { justify-content: center; gap: 5px; }
+  .compute button { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
   .failure { display: flex; gap: 7px; align-items: flex-start; padding: 7px 12px; background: var(--error-soft); color: var(--error); font-size: 12px; border-bottom: 1px solid var(--line); }
   .failure strong { color: inherit; }
   .tabs .sample { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); max-width: 210px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .tabs .sample:hover { color: var(--accent); }
   .tabs { flex-wrap: nowrap; overflow: hidden; }
+  .whole { font-size: 12px; color: var(--muted); white-space: nowrap; gap: 4px; }
   .tabs button.primary { background: var(--accent); color: var(--accent-text); }
   .source { display: block; padding: 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 500; }
   .source.none { color: var(--muted); font-style: italic; }
+  .source.formula { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .helpers { padding: 8px 12px 4px; display: grid; gap: 3px; }
+  .helpers-head { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; margin-bottom: 2px; }
+  .helper { display: flex; gap: 7px; align-items: center; text-align: left; padding: 4px 8px; border-color: transparent; background: var(--neutral-soft); }
+  .helper.selected { background: var(--soft); border-color: var(--accent); }
+  .helper .mono { color: var(--muted); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .helper .name { font-weight: 600; flex: 1; }
   .ghost { position: fixed; z-index: 20; pointer-events: none; background: var(--accent); color: var(--accent-text); padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); white-space: nowrap; }
   .status { width: 70px; white-space: nowrap; text-align: right; }
   .unused { padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

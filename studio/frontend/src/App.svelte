@@ -47,6 +47,8 @@
   let saved = $state('') // the mapping as last saved or opened
   let raw = $state(null)
   let preview = $state(null)
+  let traced = $state('') // the column whose formula the preview traces
+  let aggregateAll = $state(false) // aggregates over the whole sample file
   let issues = $state([])
   let dialog = $state(null)
   let confirmBox = $state(null) // { text, title, yes }
@@ -138,10 +140,13 @@
     // timeout.
     const snapshot = JSON.parse(JSON.stringify(mapping))
     const path = csvPath
+    const column = traced
+    const all = aggregateAll
     const t = setTimeout(async () => {
       try {
         if (path) {
-          const res = await api.preview(path, snapshot)
+          const res = await api.preview(path, snapshot, { trace: column, aggregate_all: all })
+          res.traced = column
           preview = res
           issues = res.issues ?? []
         } else {
@@ -460,7 +465,7 @@
     {:else if screen === 'setup' && mapping}
       <SetupStep bind:mapping onback={() => (screen = 'target')} oncontinue={() => go('edit')} />
     {:else if screen === 'edit' && mapping}
-      <Editor bind:mapping {sources} {detection} {preview} {issues} {autoMatched} {reviewKey} samplePath={csvPath} onsample={openSample}
+      <Editor bind:mapping bind:traced bind:aggregateAll {sources} {detection} {preview} {issues} {autoMatched} {reviewKey} samplePath={csvPath} onsample={openSample}
         locked={targetMode === 'file'} targetFile={targetPath} onedittarget={editTarget} />
     {:else if screen === 'tedit' && tgt}
       {#key tgt.id}

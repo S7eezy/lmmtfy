@@ -26,6 +26,7 @@ import (
 	"github.com/S7eezy/lmmtfy/internal/csvio"
 	"github.com/S7eezy/lmmtfy/internal/detect"
 	"github.com/S7eezy/lmmtfy/internal/engine"
+	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/report"
 	"github.com/S7eezy/lmmtfy/internal/runners"
 )
@@ -154,6 +155,33 @@ type Issue struct {
 	Message  string `json:"message"`
 }
 
+// FormulaCheck is what an editor shows under a formula as it is typed.
+type FormulaCheck struct {
+	Type  string `json:"type,omitempty"`  // result type, when it compiles
+	Error string `json:"error,omitempty"` // without the position
+	Pos   int    `json:"pos,omitempty"`   // 1-based character of the error, 0 for none
+}
+
+// CheckFormula checks one formula of a mapping being edited: path is
+// "columns.<name>" or "helpers.<name>".
+func CheckFormula(m *config.Mapping, path, src string) FormulaCheck {
+	m = clone(m)
+	m.ApplyDefaults()
+	typ, err := engine.CheckFormula(m, path, src)
+	res := FormulaCheck{Type: typ}
+	var fe *expr.Error
+	switch {
+	case errors.As(err, &fe):
+		res.Error, res.Pos = fe.Msg, fe.Pos
+	case err != nil:
+		res.Error = err.Error()
+	}
+	return res
+}
+
+// Functions documents the functions formulas can call.
+func Functions() []expr.Doc { return expr.Docs() }
+
 // Check validates a mapping as `lmmtfy validate` does.
 func Check(m *config.Mapping) []Issue {
 	_, issues := compile(m)
@@ -198,11 +226,26 @@ type Result struct {
 	Summary  *report.Summary `json:"summary,omitempty"`
 	Failure  string          `json:"failure,omitempty"`
 	Rejects  string          `json:"rejects,omitempty"` // reject file written (conversions only)
+	// Trace is how the traced column was filled in the first rows
+	// (previews only).
+	Trace []engine.TraceRow `json:"trace,omitempty"`
+}
+
+// TraceRows is the number of rows traced for the column panel.
+const TraceRows = 8
+
+// PreviewOptions tune a preview.
+type PreviewOptions struct {
+	// Trace names a column: the result tells how it was filled.
+	Trace string `json:"trace,omitempty"`
+	// AggregateAll computes aggregates over the whole file, not only the
+	// previewed rows.
+	AggregateAll bool `json:"aggregate_all,omitempty"`
 }
 
 // PreviewOutput converts the first rows of a file in memory and returns the
 // output, the rejected rows and the log events. Nothing is written to disk.
-func PreviewOutput(path string, m *config.Mapping) (*Result, error) {
+func PreviewOutput(path string, m *config.Mapping, opts PreviewOptions) (*Result, error) {
 	plan, issues := compile(m)
 	res := &Result{Issues: issues}
 	if plan == nil {
@@ -216,14 +259,21 @@ func PreviewOutput(path string, m *config.Mapping) (*Result, error) {
 
 	var out, rejects, log bytes.Buffer
 	job := engine.Job{
-		Input:   f,
-		Output:  &out,
-		Rejects: func() (io.Writer, error) { return &rejects, nil },
-		Log:     report.NewLogger(&log, report.LevelWarnings, "json", nil),
-		MaxRows: PreviewRows,
+		Input:        f,
+		Output:       &out,
+		Rejects:      func() (io.Writer, error) { return &rejects, nil },
+		Log:          report.NewLogger(&log, report.LevelWarnings, "json", nil),
+		MaxRows:      PreviewRows,
+		AggregateAll: opts.AggregateAll,
+	}
+	if opts.Trace != "" {
+		job.Trace = &engine.Trace{Column: opts.Trace, Max: TraceRows}
 	}
 	sum, err := plan.Run(job)
 	res.Summary = sum
+	if job.Trace != nil {
+		res.Trace = job.Trace.Rows
+	}
 	if err != nil {
 		res.Failure = err.Error()
 	}

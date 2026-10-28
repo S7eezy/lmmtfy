@@ -1,0 +1,5 @@
+sensor,read_at,value,first_sensor,share,above_mean,rows
+A,2024-03-02 10:00,12.50,A,0.4348,true,5
+B,2024-03-01 08:30,7.00,A,0.2435,false,5
+A,2024-03-01 08:30,9.25,A,0.3217,false,5
+B,2024-03-03 12:00,,A,,false,5

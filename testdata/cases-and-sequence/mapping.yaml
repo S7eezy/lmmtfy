@@ -1,0 +1,36 @@
+version: 1
+name: cases-and-sequence
+on_error: { strategy: skip_row }
+target:
+  output: { line_ending: lf }
+  columns:
+    - { name: line_no, type: integer, thousands_sep: " " }
+    - { name: ref, type: string }
+    - { name: id, type: integer }
+    - { name: level, type: string }
+    - { name: sign, type: string }
+    - { name: flagged, type: boolean, true_value: "Y", false_value: "N" }
+helpers:
+  temp: { source: temp, type: integer }
+  amount: { source: amount, type: decimal }
+  status: { source: status, type: string }
+columns:
+  # Rejected rows take no number: row 4 is rejected, numbers stay contiguous.
+  line_no: { sequence: { start: 1000, step: 10 } }
+  ref: { sequence: {} }
+  id: { source: id }
+  level:
+    cases:
+      - { when: "is_empty([temp])", then: UNKNOWN }
+      - { when: "[temp] > 30", then: HOT }
+      - { when: "[temp] > 10", then: MILD }
+    else: COLD
+  sign:
+    cases:
+      - { when: "[amount] < 0", then_formula: '"minus " & text(abs([amount]))' }
+    else_formula: 'text([amount])'
+  # then and else are written like defaults: in the output representation.
+  flagged:
+    cases:
+      - { when: '[status] = "bad"', then: "Y" }
+    else: "N"

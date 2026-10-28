@@ -1,0 +1,24 @@
+version: 1
+name: readings
+target: target.yaml
+helpers:
+  ts: { source: ts_ms, type: integer }
+  temp: { source: temp, type: decimal, decimal_sep: "," }
+  qty: { source: qty, type: integer }
+  first: { source: first, type: string }
+  last: { source: last, type: string }
+columns:
+  line: { formula: "row()" }
+  id: { source: id }
+  read_at: { formula: 'from_epoch([ts], "ms")' }
+  # The source is in milliseconds, the target in seconds.
+  duration_s: { source: ts_ms, formula: "value / 1000" }
+  status:
+    formula: 'ifs([temp] > 20, "HOT", [temp] > 5, "MILD", is_empty([temp]), "UNKNOWN", "COLD")'
+  # [price] is the price as written: rounded to 2 decimals.
+  total: { formula: "[price] * coalesce([qty], 1)" }
+  price: { source: unit_price }
+  name: { formula: '[first] & " " & [last]' }
+  sort_key: { formula: 'pad_left(text([id]), 5, "0") & "-" & lower([country])' }
+  # The formula also runs on empty values.
+  country: { source: code, formula: 'coalesce(upper(value), "XX")' }

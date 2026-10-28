@@ -1,0 +1,2 @@
+primaryKey,batchId,object,price,qty,_line,_column,_error
+10,B4,valve,abc,1,11,price,"""abc"" is not a decimal number"

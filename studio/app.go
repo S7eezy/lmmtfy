@@ -8,6 +8,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/studio"
 	"github.com/S7eezy/lmmtfy/internal/version"
 )
@@ -81,8 +82,18 @@ func (a *App) ReadRaw(path string, in config.Input) (*studio.Raw, error) {
 
 func (a *App) Check(m config.Mapping) []studio.Issue { return studio.Check(&m) }
 
-func (a *App) Preview(path string, m config.Mapping) (*studio.Result, error) {
-	return studio.PreviewOutput(path, &m)
+func (a *App) Preview(path string, m config.Mapping, opts studio.PreviewOptions) (*studio.Result, error) {
+	return studio.PreviewOutput(path, &m, opts)
+}
+
+func (a *App) CheckFormula(m config.Mapping, path, src string) studio.FormulaCheck {
+	return studio.CheckFormula(&m, path, src)
+}
+
+func (a *App) Functions() []expr.Doc { return studio.Functions() }
+
+func (a *App) Batches(path string, m config.Mapping, by []string) (*studio.BatchStats, error) {
+	return studio.Batches(path, &m, by)
 }
 
 func (a *App) LoadMapping(path string) (*studio.Loaded, error) { return studio.LoadMapping(path) }

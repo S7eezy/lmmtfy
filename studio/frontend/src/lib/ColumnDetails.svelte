@@ -2,19 +2,80 @@
   // Options of the selected column, in reading order: what was detected in
   // the source, how the source is read, how the output is written. Empty
   // fields are removed, so defaults apply.
-  import { Sparkles, FileInput, FileOutput, ShieldAlert, Replace, Plus, X, ArrowRight, Info } from '@lucide/svelte'
+  import { Sparkles, FileInput, FileOutput, ShieldAlert, Replace, Plus, X, ArrowRight, Info, Sigma, Columns3, Trash2, Pin, Split, ListOrdered } from '@lucide/svelte'
+  import CasesEditor from './CasesEditor.svelte'
+  import DefaultField from './DefaultField.svelte'
   import Section from './Section.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
   import TargetColumnForm from './TargetColumnForm.svelte'
+  import FormulaField from './FormulaField.svelte'
+  import * as M from './mapping.js'
   import { list, joinList, issuesFor, sourceKey } from './mapping.js'
   import { pct } from './confidence.js'
 
   // locked: the target is a linked file, its options are shown, not edited.
-  let { col, r, issues = [], detected = null, locked = false } = $props()
+  // helper: col and r are a helper's ({ name, type } and the helper).
+  let { col, r, mapping, issues = [], detected = null, locked = false, helper = false, sources = [], detectedFor = () => null,
+    trace = null, onremove = () => {} } = $props()
 
   const hasSource = $derived(!!(r?.source || r?.source_index))
-  const mine = $derived(issuesFor(issues, col.name))
+  const path = $derived(`${helper ? 'helpers' : 'columns'}.${col.name}`)
+  const mine = $derived(issuesFor(issues, col.name, helper))
+  // Shown by the formula field, which checks the formula as it is typed;
+  // these are what only the whole mapping tells (circular references).
+  const formulaIssues = $derived(mine.filter((i) => i.path.endsWith('.formula')))
+  // Choosing "Source column" before choosing which one.
+  let pendingSource = $state(false)
+  $effect(() => { col; pendingSource = false })
+  const mode = $derived(pendingSource ? 'source' : M.fillMode(r))
+
+  const MODES = [['source', 'Source', FileInput], ['fixed', 'Fixed value', Pin], ['formula', 'Formula', Sigma],
+    ['cases', 'Conditions', Split], ['sequence', 'Row number', ListOrdered]]
+  // Helpers are not written: no fixed value (a formula can be one), no row numbers.
+  const modes = $derived(helper ? MODES.filter(([m]) => m !== 'fixed' && m !== 'sequence') : MODES)
+  function fill(m) {
+    if (m === 'source') { pendingSource = !hasSource; return }
+    pendingSource = false
+    M.fillRule(r, m, helper ? { default: null } : col)
+  }
+  function setNumber(key, v) {
+    if (v === '' || isNaN(Number(v))) delete r.sequence[key]
+    else r.sequence[key] = Math.trunc(Number(v))
+  }
+  const fromLabel = { formula: 'formula', cases: 'conditions', sequence: 'row number', fixed: 'no source', source: 'no source' }
+  function pick(key) {
+    const s = sources.find((x) => x.key === key)
+    if (!s) return
+    if (helper) M.setHelperSource(mapping, col.name, s, detectedFor(s))
+    else M.setSource(mapping, col.name, s, detectedFor(s))
+    pendingSource = false
+  }
+  // A Unix timestamp is a number: read it through an integer helper.
+  function epoch() {
+    const s = sources.find((x) => x.key === sourceKey(r))
+    if (!s) return
+    const name = M.addHelper(mapping, s, detectedFor(s), 'integer')
+    delete r.source
+    delete r.source_index
+    r.formula = `from_epoch([${name}], "ms")`
+  }
+  const temporal0 = $derived(col.type === 'date' || col.type === 'datetime')
+  const examples = $derived(hasSource ? [
+    { label: 'Convert units', formula: 'value / 1000', note: 'e.g. milliseconds to seconds' },
+    { label: 'Round', formula: 'round(value, 2)' },
+    { label: 'Change case', formula: 'upper(value)' },
+    { label: 'Replace text', formula: 'replace(value, "old", "new")' },
+    { label: 'Fill empty values from another column', formula: 'coalesce(value, [column])' },
+    ...(temporal0 && !helper ? [{ label: 'Unix timestamp in milliseconds → datetime', note: 'Reads the source as a number, through a helper.', apply: epoch }] : []),
+  ] : [
+    { label: 'Join columns', formula: '[column] & " " & [other column]' },
+    { label: 'If … else', formula: 'if([column] > 0, "yes", "no")' },
+    { label: 'Several cases', formula: 'ifs([column] > 100, "high", [column] > 10, "medium", "low")' },
+    { label: 'Compute', formula: 'round([price] * [quantity], 2)' },
+    { label: 'Row number', formula: 'row()' },
+    { label: 'Date of the conversion', formula: 'today()' },
+  ])
   const temporal = $derived(col.type === 'date' || col.type === 'datetime' || col.type === 'time')
   const numeric = $derived(col.type === 'integer' || col.type === 'decimal')
 
@@ -31,7 +92,7 @@
   // default applies, if any. Only a column with neither a source nor a
   // target default needs an explicit empty default.
   function setDefault(value) {
-    if (value === '' && (hasSource || col.default !== undefined)) delete r.default
+    if (value === '' && (hasSource || r.formula !== undefined || col.default !== undefined)) delete r.default
     else r.default = value
   }
   function addPair() { r.map = [...(r.map ?? []), { from: '', to: '' }] }
@@ -44,13 +105,60 @@
 <div class="details">
   <header class="title">
     <div class="flow">
-      <span class="from" class:none={!hasSource}>{hasSource ? sourceKey(r) : 'no source'}</span>
+      <span class="from" class:none={!hasSource}>{hasSource ? sourceKey(r) : fromLabel[mode]}</span>
       <ArrowRight size={14} />
       <span class="to"><TypeIcon type={col.type} size={15} /> {col.name}</span>
+      {#if helper}<span class="helper-tag">helper · not written</span>
+        <span class="spacer"></span><button class="icon delete" onclick={onremove} title="Remove the helper" aria-label="Remove the helper"><Trash2 size={14} /></button>{/if}
     </div>
   </header>
 
-  {#each mine as i}<div class="issue {i.severity}">{i.path.replace(`columns.${col.name}.`, '').replace(`target.columns.${col.name}.`, 'output ')}: {i.message}</div>{/each}
+  {#each mine.filter((i) => !i.path.endsWith('.formula')) as i}<div class="issue {i.severity}">{i.path.replace(`${path}.`, '').replace(`target.columns.${col.name}.`, 'output ').replace(path, helper ? 'helper' : 'column')}: {i.message}</div>{/each}
+
+  <Section icon={Columns3} title="Fill with">
+    <div class="modes">
+      {#each modes as [m, label, Icon]}
+        <button class:on={mode === m} onclick={() => fill(m)}><Icon size={14} /> {label}</button>
+      {/each}
+    </div>
+    {#if mode === 'source'}
+      <label class="pick">Source column
+        <select value={sourceKey(r)} onchange={(e) => pick(e.target.value)}>
+          {#if !hasSource}<option value="" disabled>Choose a source column…</option>{/if}
+          {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
+          {#if hasSource && !sources.some((s) => s.key === sourceKey(r))}<option value={sourceKey(r)}>{sourceKey(r)}{sources.length ? ' (not in this file)' : ''}</option>{/if}
+        </select>
+      </label>
+      {#if hasSource}
+        {#if r.formula === undefined}
+          <button class="link add-formula" onclick={() => (r.formula = '')}><Plus size={13} /> Change the value with a formula</button>
+        {:else}
+          <div class="sub row"><span class="muted">Formula on <span class="mono">value</span>, the source value read as {col.type}:</span><span class="spacer"></span>
+            <button class="link" onclick={() => delete r.formula}>Remove</button></div>
+          <FormulaField bind:value={r.formula} {mapping} {path} self={col.name} hasValue colType={col.type} {sources} {detectedFor} {trace} {examples} problems={formulaIssues} placeholder="e.g. value / 1000" />
+        {/if}
+      {/if}
+    {:else if mode === 'cases'}
+      <CasesEditor {r} {mapping} {path} {col} {sources} {detectedFor} issues={mine} />
+      {#if trace?.length}<p class="hint trace-hint">The first rows:</p>{/if}
+      {#each trace ?? [] as t}
+        <div class="traced row"><span class="muted">line {t.line}</span>{#each t.inputs ?? [] as i}<span class="mono muted">[{i.column}] {i.empty ? 'empty' : i.value}</span>{/each}<span class="spacer"></span><strong class:failed={t.error && !t.result}>{t.error && !t.result ? t.error : t.result || 'empty'}</strong></div>
+      {/each}
+    {:else if mode === 'sequence'}
+      <div class="grid pick">
+        <label>Start <input type="number" value={r.sequence.start ?? 1} oninput={(e) => setNumber('start', e.target.value)} /></label>
+        <label>Step <input type="number" value={r.sequence.step ?? 1} oninput={(e) => setNumber('step', e.target.value)} /></label>
+      </div>
+      <p class="hint">Rows are numbered as they are written: a rejected row takes no number. Formulas cannot read these numbers; <span class="mono">row()</span> gives the input row number.</p>
+    {:else if mode === 'fixed'}
+      <div class="pick">
+        <DefaultField {r} {mapping} {path} {col} {sources} {detectedFor} label="Value of every row" onvalue={setDefault}
+          placeholder={col.default !== undefined ? `target default: ${col.default}` : 'empty'} />
+      </div>
+    {:else}
+      <FormulaField bind:value={r.formula} {mapping} {path} self={col.name} colType={col.type} {sources} {detectedFor} {trace} {examples} problems={formulaIssues} placeholder={'e.g. [first name] & " " & [last name]'} />
+    {/if}
+  </Section>
 
   {#if detected}
     <Section icon={Sparkles} title="Detected in the source">
@@ -137,17 +245,35 @@
     </Section>
   {/if}
 
-  <Section icon={FileOutput} title="Writing the output" hint={locked ? 'Set by the target file: change it with Edit target.' : 'How the value is checked and written in the output file.'}>
-    <TargetColumnForm {col} readonly={locked} />
-    <div class="grid default">
-      <label>Default value {hasSource ? '' : '(every row)'}
-        <input value={r.default ?? ''} oninput={(e) => setDefault(e.target.value)} placeholder={col.default !== undefined ? `target default: ${col.default}` : hasSource ? 'none' : 'empty'} />
-      </label>
+  {#if helper}
+    <Section icon={FileOutput} title="Type" hint="How formulas read the helper. It is written nowhere.">
+      <div class="grid">
+        <label>Type
+          <select value={col.type} onchange={(e) => M.setHelperType(mapping, col.name, e.target.value, detected)}>
+            {#each M.TYPES as t}<option value={t}>{t}</option>{/each}
+          </select>
+        </label>
+      </div>
+      <div class="default">
+        <DefaultField {r} {mapping} {path} {col} {sources} {detectedFor} onvalue={(v) => (v === '' ? delete r.default : (r.default = v))}
+          placeholder={{ decimal: '1234.5', integer: '12', date: '2024-01-31', datetime: '2024-01-31T10:00:00', time: '10:00:00', boolean: 'true' }[col.type] ?? 'none'} />
+      </div>
+    </Section>
+  {:else}
+    <Section icon={FileOutput} title="Writing the output" hint={locked ? 'Set by the target file: change it with Edit target.' : 'How the value is checked and written in the output file.'}>
+      <TargetColumnForm {col} readonly={locked} />
+      {#if mode !== 'fixed' && mode !== 'sequence'}
+        <div class="default">
+          <DefaultField {r} {mapping} {path} {col} {sources} {detectedFor} onvalue={setDefault}
+            placeholder={col.default !== undefined ? `target default: ${col.default}` : 'none'} />
+          {#if mode === 'formula' || mode === 'cases'}<p class="hint override">Used when {mode === 'formula' ? 'the formula fails' : 'a condition fails'} and invalid values “use the default”.</p>{/if}
+        </div>
+      {/if}
       {#if r.default === '' && col.default !== undefined}
         <p class="hint override">Empty, which overrides the target default. <button class="link" onclick={() => delete r.default}>Use “{col.default}”</button></p>
       {/if}
-    </div>
-  </Section>
+    </Section>
+  {/if}
 
   <Section icon={ShieldAlert} title="Invalid values">
     <label>For this column
@@ -169,6 +295,21 @@
   .from.none { background: var(--neutral-soft); color: var(--muted); font-style: italic; font-family: inherit; }
   .to { display: inline-flex; gap: 5px; align-items: center; font-weight: 700; font-size: 15px; color: var(--text); word-break: break-all; }
   .grid { grid-template-columns: 1fr 1fr; }
+  .flow .spacer { flex: 1; }
+  .helper-tag { font-size: 11px; color: var(--muted); background: var(--neutral-soft); border-radius: 9px; padding: 1px 8px; }
+  .delete { color: var(--muted); }
+  .delete:hover { color: var(--error); }
+  .pick { margin-top: 10px; }
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .modes button { display: inline-flex; gap: 5px; align-items: center; justify-content: center; padding: 5px 6px; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  .modes button :global(svg) { flex-shrink: 0; }
+  .modes button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .trace-hint { margin: 8px 0 2px; }
+  .traced { font-size: 12px; gap: 6px; padding: 2px 4px; border-top: 1px solid var(--line); flex-wrap: nowrap; overflow: hidden; }
+  .traced .mono { white-space: nowrap; }
+  .traced .failed { color: var(--error); font-weight: 500; }
+  .add-formula { display: inline-flex; gap: 4px; align-items: center; margin-top: 6px; padding-left: 0; }
+  .sub { margin: 10px 0 4px; font-size: 12px; flex-wrap: nowrap; }
   .wide { grid-column: 1 / -1; }
   .small { font-size: 11px; }
   .examples { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }

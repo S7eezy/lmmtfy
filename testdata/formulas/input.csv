@@ -1,0 +1,4 @@
+id,ts_ms,temp,unit_price,qty,first,last,code
+1,1700000000123,"21,5",10.005,3,Ada,Lovelace,fr
+2,1700000060000,"4,2",2.5,,Alan,Turing,
+3,1700000120500,,0.333,7,Grace,Hopper,us

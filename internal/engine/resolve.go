@@ -10,7 +10,8 @@ import (
 )
 
 type resolution struct {
-	active          []*active
+	active          []*active // output columns, in output order
+	order           []*active // every column, helpers included, in evaluation order
 	missing         []report.MissingColumn
 	missingRequired []string
 	unused          []string // source columns no rule reads: dropped
@@ -27,12 +28,15 @@ func (p *Plan) resolve(header []string, width int) resolution {
 		}
 	}
 	used := make([]bool, width)
+	byID := make([]*active, len(p.nodes))
 
-	for _, c := range p.cols {
-		a := &active{column: c}
+	for _, c := range p.nodes {
+		a := &active{column: c, pos: -1, defaultOut: c.defaultOut}
 		if !c.hasSource {
-			a.constant, a.constOut = true, c.fallback(p)
-			res.active = append(res.active, a)
+			if !c.computes() {
+				a.constant, a.constDefault = true, true
+			}
+			byID[c.id] = a
 			continue
 		}
 
@@ -43,17 +47,21 @@ func (p *Plan) resolve(header []string, width int) resolution {
 		if found {
 			a.idx = idx
 			used[idx] = true
-			res.active = append(res.active, a)
+			byID[c.id] = a
 			continue
 		}
 
 		missing := report.MissingColumn{Source: c.sourceLabel(), Target: c.name}
 		switch c.ifMissing {
 		case "empty":
-			a.constant, a.constOut = true, p.nullOut
+			if c.formula != nil {
+				a.absent = true // the formula still runs, on an empty value
+			} else {
+				a.constant, a.constOut, a.constEmpty = true, p.nullOut, true
+			}
 			missing.Action = "empty"
 		case "default":
-			a.constant, a.constOut = true, *c.defaultOut
+			a.constant, a.constDefault = true, true
 			missing.Action = "default"
 		case "omit":
 			missing.Action = "omitted"
@@ -64,7 +72,24 @@ func (p *Plan) resolve(header []string, width int) resolution {
 			continue
 		}
 		res.missing = append(res.missing, missing)
-		res.active = append(res.active, a)
+		byID[c.id] = a
+	}
+
+	for _, a := range byID {
+		if a != nil && a.constDefault {
+			a.constOut, a.constEmpty = a.fallback(p), a.fallbackEmpty()
+		}
+	}
+	for _, c := range p.cols {
+		if a := byID[c.id]; a != nil {
+			a.pos = len(res.active)
+			res.active = append(res.active, a)
+		}
+	}
+	for _, id := range p.order {
+		if a := byID[id]; a != nil {
+			res.order = append(res.order, a)
+		}
 	}
 
 	for i, u := range used {
@@ -83,7 +108,7 @@ func (p *Plan) resolve(header []string, width int) resolution {
 type ColumnCheck struct {
 	Target string
 	Source string // "" when the column has no source
-	Status string // "found", "missing", "constant"
+	Status string // "found", "missing", "constant", "computed" (formula, cases or sequence)
 	Action string // for missing columns: empty, default, omitted, error
 }
 
@@ -129,6 +154,8 @@ func (p *Plan) CheckInput(src io.Reader) (*InputCheck, error) {
 			cc.Source = c.sourceLabel()
 		}
 		switch m, isMissing := missing[c.name]; {
+		case !c.hasSource && c.computes():
+			cc.Status = "computed"
 		case !c.hasSource:
 			cc.Status = "constant"
 		case isMissing:

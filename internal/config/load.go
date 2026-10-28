@@ -138,6 +138,13 @@ func (m *Mapping) ApplyDefaults() {
 		m.OnError.RejectFile = ptr(true)
 	}
 
+	if g := m.Group; g != nil {
+		if g.Sorted == nil {
+			g.Sorted = ptr(true)
+		}
+		setDefault(&g.Overflow, GroupOverflows[0])
+	}
+
 	setDefault(&m.Logging.Level, LogLevels[0])
 	setDefault(&m.Logging.Format, LogFormats[0])
 	if m.Logging.Summary == nil {
@@ -145,16 +152,24 @@ func (m *Mapping) ApplyDefaults() {
 	}
 
 	for name, r := range m.Columns {
-		if r.Optional {
-			setDefault(&r.IfMissing, "empty")
-		} else {
-			setDefault(&r.IfMissing, IfMissingValues[0])
-		}
-		setDefault(&r.IfEmpty, IfEmptyValues[0])
-		setDefault(&r.MapUnmatched, MapUnmatched[0])
 		// Rule is stored by value in the map: write the copy back.
-		m.Columns[name] = r
+		m.Columns[name] = r.withDefaults()
 	}
+	for name, h := range m.Helpers {
+		h.Rule = h.Rule.withDefaults()
+		m.Helpers[name] = h
+	}
+}
+
+func (r Rule) withDefaults() Rule {
+	if r.Optional {
+		setDefault(&r.IfMissing, "empty")
+	} else {
+		setDefault(&r.IfMissing, IfMissingValues[0])
+	}
+	setDefault(&r.IfEmpty, IfEmptyValues[0])
+	setDefault(&r.MapUnmatched, MapUnmatched[0])
+	return r
 }
 
 func setDefault[T ~string](field *T, value T) {

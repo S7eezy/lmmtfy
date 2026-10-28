@@ -1,0 +1,5 @@
+line_no,ref,id,level,sign,flagged
+1 000,1,1,HOT,10,N
+1 010,2,2,MILD,minus 3.5,N
+1 020,3,3,UNKNOWN,5,N
+1 030,4,5,COLD,7,Y

@@ -74,6 +74,8 @@ func Validate(name, mappingPath, input string, stdout, stderr io.Writer) int {
 		switch c.Status {
 		case "found":
 			fmt.Fprintf(tw, "  %s\t← %s\t\n", c.Target, c.Source)
+		case "computed":
+			fmt.Fprintf(tw, "  %s\t(formula)\t\n", c.Target)
 		case "constant":
 			fmt.Fprintf(tw, "  %s\t(no source: default or empty)\t\n", c.Target)
 		case "missing":
