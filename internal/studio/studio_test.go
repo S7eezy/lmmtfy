@@ -73,7 +73,7 @@ func TestPreviewOutputAndEditing(t *testing.T) {
 	if err != nil || res.Failure != "" {
 		t.Fatal(err, res.Failure)
 	}
-	if !slices.Equal(res.Header, []string{"n_commande", "date", "montant_ttc", "etat", "remarque"}) || len(res.Rows) != 3 {
+	if !slices.Equal(res.Header, []string{"N_Commande", "Date", "Montant_TTC", "Etat", "Remarque"}) || len(res.Rows) != 3 {
 		t.Fatalf("header %v, %d rows", res.Header, len(res.Rows))
 	}
 	if got := res.Rows[0][2]; got != "1234.50" {
@@ -83,24 +83,24 @@ func TestPreviewOutputAndEditing(t *testing.T) {
 	// Rename a column, type it, delete one, add one with a default.
 	cols := m.Target.Inline.Columns
 	cols[0].Name = "order_id"
-	m.Columns["order_id"] = m.Columns["n_commande"]
-	delete(m.Columns, "n_commande")
+	m.Columns["order_id"] = m.Columns["N_Commande"]
+	delete(m.Columns, "N_Commande")
 	m.Target.Inline.Columns = append(slices.Delete(cols, 3, 4), config.TargetColumn{Name: "country", Type: "string"})
-	delete(m.Columns, "etat")
+	delete(m.Columns, "Etat")
 	fr := config.Scalar("FR")
 	m.Columns["country"] = config.Rule{Default: &fr}
 
 	res, _ = PreviewOutput(acme, m, PreviewOptions{})
-	if res.Failure != "" || !slices.Equal(res.Header, []string{"order_id", "date", "montant_ttc", "remarque", "country"}) || res.Rows[2][4] != "FR" {
+	if res.Failure != "" || !slices.Equal(res.Header, []string{"order_id", "Date", "Montant_TTC", "Remarque", "country"}) || res.Rows[2][4] != "FR" {
 		t.Errorf("edited preview: %v %v %q", res.Header, res.Rows, res.Failure)
 	}
 
 	// A broken rule shows issues, not a preview.
-	bad := m.Columns["date"]
+	bad := m.Columns["Date"]
 	bad.Formats = []string{"DD/MM/2026"}
-	m.Columns["date"] = bad
+	m.Columns["Date"] = bad
 	res, _ = PreviewOutput(acme, m, PreviewOptions{})
-	if res.Rows != nil || !slices.ContainsFunc(res.Issues, func(i Issue) bool { return i.Path == "columns.date.formats" }) {
+	if res.Rows != nil || !slices.ContainsFunc(res.Issues, func(i Issue) bool { return i.Path == "columns.Date.formats" }) {
 		t.Errorf("issues = %+v", res.Issues)
 	}
 }

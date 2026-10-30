@@ -10,9 +10,9 @@ target:
     delimiter: ","
     line_ending: crlf
   columns:
-  - name: primarykey
+  - name: primaryKey
     type: integer
-  - name: batchid
+  - name: batchId
     type: string
   - name: object
     type: string
@@ -28,10 +28,10 @@ on_error:
   reject_file: true
 columns:
   # integer, 100% of 10 values, e.g. "3", "1", "2"
-  primarykey:
+  primaryKey:
     source: primaryKey
   # string, 100% of 10 values, max 2 chars, e.g. "B1", "B2", "B3"
-  batchid:
+  batchId:
     source: batchId
   # string, 100% of 10 values, max 6 chars, e.g. "bolt", "nut", "washer"
   object:

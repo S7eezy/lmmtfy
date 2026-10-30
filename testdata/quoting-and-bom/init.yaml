@@ -10,9 +10,9 @@ target:
     delimiter: ","
     line_ending: crlf
   columns:
-  - name: ref
+  - name: Ref
     type: string
-  - name: note
+  - name: Note
     type: string
 input:
   encoding: utf-8
@@ -22,8 +22,8 @@ on_error:
   reject_file: true
 columns:
   # string, 100% of 2 values, max 2 chars, e.g. "A1", "A2"
-  ref:
+  Ref:
     source: Ref
   # string, 100% of 2 values, max 12 chars, e.g. "two\nlines", "say \"hi\" \\o/"
-  note:
+  Note:
     source: Note

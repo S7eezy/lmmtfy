@@ -50,7 +50,7 @@ func Open(path string) (*Opened, error) {
 		return nil, err
 	}
 	base := filepath.Base(path)
-	name := detect.TargetName(strings.TrimSuffix(base, filepath.Ext(base)), 1)
+	name := detect.FileName(strings.TrimSuffix(base, filepath.Ext(base)))
 	data, err := app.RenderMapping(name, base, res)
 	if err != nil {
 		return nil, err
@@ -497,7 +497,7 @@ func Export(m *config.Mapping, goos, arch, output string) (string, error) {
 
 // ConverterName proposes a converter file name for a mapping and platform.
 func ConverterName(m *config.Mapping, goos, arch string) string {
-	name := detect.TargetName(m.Name, 1) + "-converter"
+	name := detect.FileName(m.Name) + "-converter"
 	name = strings.ReplaceAll(name, "_", "-")
 	if goos == "windows" {
 		return name + ".exe"

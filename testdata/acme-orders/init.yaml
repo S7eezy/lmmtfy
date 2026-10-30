@@ -10,16 +10,16 @@ target:
     delimiter: ","
     line_ending: crlf
   columns:
-  - name: n_commande
+  - name: N_Commande
     type: integer
-  - name: date
+  - name: Date
     type: date
-  - name: montant_ttc
+  - name: Montant_TTC
     type: decimal
     scale: 2
-  - name: etat
+  - name: Etat
     type: string
-  - name: remarque
+  - name: Remarque
     type: string
 input:
   encoding: windows-1252
@@ -32,23 +32,23 @@ on_error:
   reject_file: true
 columns:
   # integer, 100% of 3 values, e.g. "1001", "1002", "1003"
-  n_commande:
+  N_Commande:
     source: N° Commande
   # date, 100% of 3 values, formats DD/MM/YYYY, DD-MM-YYYY, e.g. "05/10/2026", "06-10-2026", "07/10/2026"
   # REVIEW: several formats in the same column
-  date:
+  Date:
     source: Date
     formats:
     - DD/MM/YYYY
     - DD-MM-YYYY
   # decimal, 100% of 3 values, decimal ",", thousands " ", scale 2, e.g. "1 234,50", "99,9", "12"
-  montant_ttc:
+  Montant_TTC:
     source: Montant TTC
     decimal_sep: ","
     thousands_sep: " "
   # string, 100% of 3 values, max 1 char, e.g. "V", "A", "E"
-  etat:
+  Etat:
     source: Etat
   # string, 100% of 2 values, max 22 chars, 1 empty, e.g. "Livraison rapide", "Client \"VIP\"; rappeler"
-  remarque:
+  Remarque:
     source: Remarque

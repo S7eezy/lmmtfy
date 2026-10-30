@@ -10,11 +10,11 @@ target:
     delimiter: ","
     line_ending: crlf
   columns:
-  - name: name
+  - name: Name
     type: string
-  - name: name_2
+  - name: Name_2
     type: string
-  - name: other
+  - name: Other
     type: string
 # REVIEW: 2 of 3 sampled rows do not have 3 fields: ragged_rows set to lenient
 # REVIEW: duplicate header names: they are numbered (Name, Name_2, ...)
@@ -28,11 +28,11 @@ on_error:
   reject_file: true
 columns:
   # string, 100% of 3 values, max 1 char, e.g. "a", "d", "f"
-  name:
+  Name:
     source: Name
   # string, 100% of 3 values, max 1 char, e.g. "b", "e", "g"
-  name_2:
+  Name_2:
     source: Name_2
   # string, 100% of 2 values, max 1 char, e.g. "c", "h"
-  other:
+  Other:
     source: Other

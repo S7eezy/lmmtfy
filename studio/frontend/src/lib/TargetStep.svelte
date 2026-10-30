@@ -28,7 +28,7 @@
   const missing = $derived(cols.filter((c) => !mapping.columns?.[c.name]))
   const others = $derived(recent.filter((r) => r.path !== targetPath))
   const target = $derived(mapping.target.inline)
-  const defaultFile = $derived(`${M.targetName(target.name || mapping.name || 'target').replaceAll('_', '-')}.target.yaml`)
+  const defaultFile = $derived(`${M.targetName(target.name || mapping.name || 'target').toLowerCase().replaceAll('_', '-')}.target.yaml`)
 
   // The draft follows edits made while the target is defined here.
   function keepDraft() {

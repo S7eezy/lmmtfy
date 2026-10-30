@@ -158,9 +158,9 @@ func (c Column) label() string {
 	return fmt.Sprintf("#%d", c.Index)
 }
 
-// TargetName turns a header into a target column name: lower case ASCII
-// letters, digits and underscores ("N° Commande" → "n_commande"). Columns
-// without a usable name become column_<index>.
+// TargetName turns a header into a target column name: ASCII letters,
+// digits and underscores, case kept ("N° Commande" → "N_Commande").
+// Columns without a usable name become column_<index>.
 func TargetName(header string, index int) string {
 	// Decompose "é" into "e" + accent, then drop the accent.
 	stripMarks := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
@@ -170,9 +170,9 @@ func TargetName(header string, index int) string {
 	}
 	var b bytes.Buffer
 	underscore := false
-	for _, r := range strings.ToLower(plain) {
+	for _, r := range plain {
 		switch {
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9':
 			if underscore && b.Len() > 0 {
 				b.WriteByte('_')
 			}
@@ -190,6 +190,12 @@ func TargetName(header string, index int) string {
 		return "c_" + name
 	}
 	return name
+}
+
+// FileName turns a name into a file-friendly one: TargetName in lower
+// case ("Orders 2026.csv" → "orders_2026_csv").
+func FileName(name string) string {
+	return strings.ToLower(TargetName(name, 1))
 }
 
 func uniqueName(name string, used map[string]bool) string {

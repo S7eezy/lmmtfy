@@ -239,9 +239,10 @@ func TestLargeFileFooterInTail(t *testing.T) {
 
 func TestTargetName(t *testing.T) {
 	tests := map[string]string{
-		"N° Commande":      "n_commande",
-		"Montant TTC (€)":  "montant_ttc",
-		"Date de création": "date_de_creation",
+		"N° Commande":      "N_Commande",
+		"Montant TTC (€)":  "Montant_TTC",
+		"Date de création": "Date_de_creation",
+		"batchId":          "batchId",
 		"  ":               "column_3",
 		"2024":             "c_2024",
 		"already_ok":       "already_ok",

@@ -8,5 +8,5 @@
   sample       2 rows (whole file)
 
   #  column  target  type    ok    details       examples
-  1  Ref     ref     string  100%  max 2 chars   "A1", "A2"
-  2  Note    note    string  100%  max 12 chars  "two\nlines", "say \"hi\" \\o/"
+  1  Ref     Ref     string  100%  max 2 chars   "A1", "A2"
+  2  Note    Note    string  100%  max 12 chars  "two\nlines", "say \"hi\" \\o/"

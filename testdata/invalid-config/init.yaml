@@ -10,7 +10,7 @@ target:
     delimiter: ","
     line_ending: crlf
   columns:
-  - name: amount
+  - name: Amount
     type: integer
 input:
   encoding: utf-8
@@ -20,5 +20,5 @@ on_error:
   reject_file: true
 columns:
   # integer, 100% of 1 values, e.g. "1"
-  amount:
+  Amount:
     source: Amount

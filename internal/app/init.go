@@ -49,7 +49,7 @@ func Init(req InitRequest) int {
 	name := req.MappingName
 	if name == "" {
 		base := filepath.Base(req.Input)
-		name = detect.TargetName(strings.TrimSuffix(base, filepath.Ext(base)), 1)
+		name = detect.FileName(strings.TrimSuffix(base, filepath.Ext(base)))
 	}
 
 	data, err := RenderMapping(name, filepath.Base(req.Input), res)

@@ -82,7 +82,7 @@
   const tgtErrors = $derived(tgtIssues.filter((i) => i.severity === 'error').length)
   const fileName = (p) => p.split(/[\\/]/).pop()
   const dirOf = (p) => p.replace(/[^\\/]+$/, '')
-  const slug = (s) => M.targetName(s || 'target').replaceAll('_', '-')
+  const slug = (s) => M.targetName(s || 'target').toLowerCase().replaceAll('_', '-')
   const recentTargets = $derived(recent.filter((r) => r.kind === 'target'))
 
   api.version().then((v) => (version = v))

@@ -146,7 +146,7 @@ export function linkTarget(m, t, rules, sources, detect = () => null) {
       continue
     }
     const s = sources.find((s) => s.label === c.name) ??
-      sources.find((s) => targetName(s.label) === targetName(c.name) || s.label.toLowerCase() === c.name.toLowerCase())
+      sources.find((s) => sameName(s.label, c.name))
     if (s) {
       const r = (m.columns[c.name] = sourceRule(s))
       readAs(r, c.type, detect(s))
@@ -397,13 +397,19 @@ export function sourceKey(r) {
   return r.source ?? ''
 }
 
-// targetName mirrors detect.TargetName: "N° Commande" → "n_commande".
+// targetName mirrors detect.TargetName: "N° Commande" → "N_Commande".
 export function targetName(header) {
-  const plain = header.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase()
-  let name = plain.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  const plain = header.normalize('NFD').replace(/\p{Mn}/gu, '')
+  let name = plain.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
   if (!name) name = 'column'
   if (/^[0-9]/.test(name)) name = 'c_' + name
   return name
+}
+
+// sameName reports whether a source header and a target column name are
+// the same name, ignoring case and punctuation.
+function sameName(header, name) {
+  return targetName(header).toLowerCase() === targetName(name).toLowerCase()
 }
 
 export function issuesFor(issues, name, helper = false) {
@@ -495,8 +501,7 @@ export function combine(m, group, patterns, sources = [], detect = () => null) {
     const cols = matches(columns(m), pattern).sort((a, b) => a.n - b.n)
     if (!m.columns[pattern]) {
       const first = cols.map((c) => m.columns[c.name]).find(Boolean)
-      const stem = targetName(pattern.replace(SLOT, ''))
-      const s = sources.find((x) => targetName(x.label) === stem)
+      const s = sources.find((x) => sameName(x.label, pattern.replace(SLOT, '')))
       const col = columns(m).find((c) => c.name === cols[0]?.name)
       m.columns[pattern] = first ? clone(first) : s ? sourceRule(s) : {}
       if (!first && s && col) readAs(m.columns[pattern], col.type, detect(s))
