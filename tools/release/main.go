@@ -232,9 +232,14 @@ func studioReadme(version, platform string) string {
 	notes := map[string]string{
 		"windows": `Run lmmtfy-studio.exe. It uses the Microsoft Edge WebView2 runtime, present on
 Windows 11 and up-to-date Windows 10. On a machine without it and without
-internet access, unpack Microsoft's "Fixed Version" WebView2 runtime into a
-folder named "webview2" next to lmmtfy-studio.exe: Studio uses it from there,
-without installing anything.
+internet access (no admin rights needed either way):
+
+- On a connected PC, download the "Evergreen Standalone Installer" (x64)
+  from https://developer.microsoft.com/microsoft-edge/webview2, copy it here
+  and run it by double-clicking: it installs for your account only.
+- Or download the "Fixed Version" runtime (.cab) and unpack it next to
+  lmmtfy-studio.exe with: expand <file>.cab -F:* <this folder>
+  Studio finds and uses it there, without installing anything.
 
 Windows SmartScreen may warn about an unsigned program the first time:
 choose "More info", then "Run anyway".`,

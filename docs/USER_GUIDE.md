@@ -30,6 +30,19 @@ Everything is portable: unpack the archive anywhere (your home folder, a USB sti
 
 `SHA256SUMS` lists a checksum per archive. Check copies made to other machines with `sha256sum -c SHA256SUMS` (Linux), `shasum -a 256 -c SHA256SUMS` (macOS) or `Get-FileHash <file>` (Windows PowerShell).
 
+### Studio on Windows without internet access
+
+Studio runs in the Microsoft Edge WebView2 runtime, present on Windows 11 and up-to-date Windows 10. If it is missing, Studio says so when it starts. On a machine without internet access, two ways, neither needing admin rights:
+
+- **Install it for your account (simplest).** On a connected PC, download the **Evergreen Standalone Installer** (x64) from [developer.microsoft.com/microsoft-edge/webview2](https://developer.microsoft.com/microsoft-edge/webview2), copy it to the machine and run it by double-clicking (not as administrator): it installs for your account only.
+- **Use it without installing.** Download the **Fixed Version** runtime (x64, a `.cab` file) instead, and unpack it next to `lmmtfy-studio.exe`, from a command prompt:
+
+  ```
+  expand Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab -F:* C:\Tools\lmmtfy
+  ```
+
+  Studio finds the unpacked `Microsoft.WebView2.FixedVersionRuntime.…` folder by itself, also inside a folder named `webview2`. Unpack with `expand`, not File Explorer, and on a local drive: the runtime does not run from a network drive. On Windows 10, Studio also gives the runtime's sandbox read access to that folder, as Microsoft requires (once, with `icacls`). If the window still stays blank, run in that folder: `icacls . /grant *S-1-15-2-2:(OI)(CI)(RX)` and `icacls . /grant *S-1-15-2-1:(OI)(CI)(RX)`.
+
 ## Quick start
 
 With the command line, from a CSV file to a production converter:
@@ -393,4 +406,4 @@ A converter cannot be pointed at another mapping: it converts with the one it wa
 | The total line at the end is rejected | Set `input.skip_footer`. |
 | Windows: "Windows protected your PC" | SmartScreen warns about unsigned programs: "More info", then "Run anyway". Or sign the files with your organization's certificate (sign converters after building them). |
 | macOS: "cannot verify the developer" | Files downloaded with a browser are quarantined: right-click, Open, then Open. Copies from a network share or USB stick are not affected. |
-| Studio on Windows does not start or shows a blank window | The WebView2 runtime is missing: install it, or unpack Microsoft's Fixed Version WebView2 runtime into a `webview2` folder next to `lmmtfy-studio.exe`. |
+| Studio on Windows does not start or shows a blank window | The WebView2 runtime is missing or unusable: see [Studio on Windows without internet access](#studio-on-windows-without-internet-access). |

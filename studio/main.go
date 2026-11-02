@@ -26,12 +26,15 @@ var assets embed.FS
 func main() {
 	a := &App{}
 	win := &windows.Options{}
-	// Air-gapped Windows machines may lack the WebView2 runtime and cannot
-	// install it: a fixed-version runtime unpacked in a "webview2" folder
-	// next to the executable is used instead, without installation.
+	// Air-gapped Windows machines may lack the WebView2 runtime: a Fixed
+	// Version runtime next to the executable is used without installation,
+	// and the messages say how to get one (see webview2.go).
 	if exe, err := os.Executable(); err == nil {
-		if dir := filepath.Join(filepath.Dir(exe), "webview2"); isDir(dir) {
-			win.WebviewBrowserPath = dir
+		dir := filepath.Dir(exe)
+		win.Messages = webview2Messages(dir)
+		if path := fixedRuntime(dir); path != "" {
+			win.WebviewBrowserPath = path
+			allowSandbox(path)
 		}
 	}
 	err := wails.Run(&options.App{
@@ -55,9 +58,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
