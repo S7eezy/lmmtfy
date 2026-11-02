@@ -41,7 +41,7 @@ Studio runs in the Microsoft Edge WebView2 runtime, present on Windows 11 and up
   expand Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab -F:* C:\Tools\lmmtfy
   ```
 
-  Studio finds the unpacked `Microsoft.WebView2.FixedVersionRuntime.…` folder by itself, also inside a folder named `webview2`. Unpack with `expand`, not File Explorer, and on a local drive: the runtime does not run from a network drive. On Windows 10, Studio also gives the runtime's sandbox read access to that folder, as Microsoft requires (once, with `icacls`). If the window still stays blank, run in that folder: `icacls . /grant *S-1-15-2-2:(OI)(CI)(RX)` and `icacls . /grant *S-1-15-2-1:(OI)(CI)(RX)`.
+  Studio finds the runtime by itself (the folder holding `msedgewebview2.exe`, up to two levels below `lmmtfy-studio.exe`, whatever its name). Take the x64 package, like Studio. Unpack with `expand`, not File Explorer, and on a local drive: the runtime does not run from a network drive. On Windows 10, Studio also gives the runtime's sandbox read access to that folder, as Microsoft requires (once, with `icacls`). If the window still stays blank, run in that folder: `icacls . /grant *S-1-15-2-2:(OI)(CI)(RX)` and `icacls . /grant *S-1-15-2-1:(OI)(CI)(RX)`.
 
 ## Quick start
 

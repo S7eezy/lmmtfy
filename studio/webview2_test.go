@@ -30,6 +30,9 @@ func TestFixedRuntime(t *testing.T) {
 			runtime(filepath.Join(d, unpacked))
 			runtime(filepath.Join(d, "webview2"))
 		}, "webview2"},
+		{"any folder name", func(d string) { runtime(filepath.Join(d, "MicrosoftWebView2Runtime")) }, "MicrosoftWebView2Runtime"},
+		{"two levels down", func(d string) { runtime(filepath.Join(d, "wv", unpacked)) }, filepath.Join("wv", unpacked)},
+		{"too deep", func(d string) { runtime(filepath.Join(d, "a", "b", "c")) }, ""},
 		{"empty webview2 is reported", func(d string) { os.Mkdir(filepath.Join(d, "webview2"), 0o755) }, "webview2"},
 	}
 	for _, tt := range tests {

@@ -31,8 +31,9 @@ func main() {
 	// and the messages say how to get one (see webview2.go).
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
-		win.Messages = webview2Messages(dir)
-		if path := fixedRuntime(dir); path != "" {
+		path := fixedRuntime(dir)
+		win.Messages = webview2Messages(dir, path)
+		if path != "" {
 			win.WebviewBrowserPath = path
 			allowSandbox(path)
 		}
