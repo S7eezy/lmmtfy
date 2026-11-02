@@ -203,7 +203,7 @@ func cmdBuild(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdVersion(stdout io.Writer) int {
-	fmt.Fprintf(stdout, "lmmtfy %s\n", version.Version)
+	fmt.Fprintf(stdout, "lmmtfy %s\n%s\n", version.Version, version.Copyright)
 
 	available := runners.Available()
 	if len(available) == 0 {

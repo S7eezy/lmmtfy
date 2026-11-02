@@ -115,7 +115,10 @@
     <span><Upload size={13} /> Drop a CSV file, a mapping or a target on the window</span>
     <span class="dot">·</span>
     <span><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd> <kbd>S</kbd> saves</span>
-    {#if version}<span class="dot">·</span><span class="version">{version === 'dev' ? 'development build' : `v${version.replace(/^v/, '')}`}</span>{/if}
+    <span class="credit">
+      lmmtfy Studio{#if version}&nbsp;<span class="version">{version === 'dev' ? 'development build' : `v${version.replace(/^v/, '')}`}</span>{/if}
+      <span class="dot">·</span> © 2026 Valentin Cavarec <span class="dot">·</span> MIT License
+    </span>
   </footer>
 </div>
 
@@ -183,6 +186,7 @@
   .foot span { display: inline-flex; gap: 5px; align-items: center; }
   .dot { opacity: 0.5; }
   .version { font-family: var(--mono); font-size: 11px; }
+  .credit { flex-basis: 100%; justify-content: center; font-size: 11px; opacity: 0.8; }
 
   /* Short windows: a smaller hero, then no picture at all. */
   @media (max-height: 800px) {

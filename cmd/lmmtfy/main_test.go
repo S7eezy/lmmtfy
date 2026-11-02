@@ -22,7 +22,7 @@ func TestRun(t *testing.T) {
 	}{
 		{"no args", nil, exitcode.Usage, "", "Usage:"},
 		{"help", []string{"help"}, exitcode.OK, "Usage:", ""},
-		{"version", []string{"version"}, exitcode.OK, "lmmtfy dev", ""},
+		{"version", []string{"version"}, exitcode.OK, "lmmtfy dev\nCopyright (c) 2026 Valentin Cavarec. MIT License.", ""},
 		{"unknown", []string{"frobnicate"}, exitcode.Usage, "", `unknown command "frobnicate"`},
 	}
 

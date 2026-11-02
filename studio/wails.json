@@ -8,6 +8,8 @@
   "frontend:dev:serverUrl": "auto",
   "info": {
     "productName": "lmmtfy Studio",
+    "companyName": "Valentin Cavarec",
+    "copyright": "Copyright (c) 2026 Valentin Cavarec. MIT License.",
     "comments": "Let Me Map That For You: CSV mapping editor"
   }
 }
