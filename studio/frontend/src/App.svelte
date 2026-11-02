@@ -11,7 +11,8 @@
   // through bindings, and previews are refreshed shortly after each change.
   // targetMode says where the target lives: "file" (linked, locked), "new"
   // (written to its own file on the next save) or "inline".
-  import { FilePlus2, Settings2, Play, Package, Save, FileCog, Upload, Target, ArrowLeft, Sheet, SquareDashed } from '@lucide/svelte'
+  import { FilePlus2, Settings2, Play, Package, Save, FileCog, Upload, Target, ArrowLeft, Sheet, SquareDashed, Sun, Moon } from '@lucide/svelte'
+  import { theme, toggleTheme } from './lib/theme.svelte.js'
   import * as api from './lib/api.js'
   import * as M from './lib/mapping.js'
   import { toast } from './lib/toast.svelte.js'
@@ -448,6 +449,9 @@
     {:else}
       <span class="spacer"></span>
     {/if}
+    <button class="icon theme" onclick={toggleTheme} title={theme.dark ? 'Light mode' : 'Dark mode'} aria-label={theme.dark ? 'Light mode' : 'Dark mode'}>
+      {#if theme.dark}<Sun size={15} />{:else}<Moon size={15} />{/if}
+    </button>
   </header>
 
   <main>
@@ -521,6 +525,8 @@
   .app { display: flex; flex-direction: column; height: 100%; }
   .bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
   .bar button { display: inline-flex; gap: 5px; align-items: center; }
+  .bar .theme { padding: 5px; color: var(--muted); }
+  .bar .theme:hover { color: var(--text); }
   .brand { font-weight: 700; font-size: 15px; color: var(--text); gap: 7px !important; }
   .brand span { color: var(--accent); font-weight: 500; }
   .doc-title { display: inline-flex; gap: 6px; align-items: center; margin-left: 6px; color: var(--muted); }
