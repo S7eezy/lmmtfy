@@ -1,5 +1,6 @@
 // The colour theme. Studio follows the system until the user picks light or
-// dark with the toggle, which is then remembered. app.css styles
+// dark with the toggle, which is then remembered; toggling back to what the
+// system shows follows the system again. app.css styles
 // <html data-theme="dark">.
 import { Environment, WindowSetDarkTheme, WindowSetLightTheme } from '../../wailsjs/runtime/runtime'
 
@@ -31,8 +32,12 @@ function apply() {
 }
 
 export function toggleTheme() {
-  picked = theme.dark ? 'light' : 'dark'
-  try { localStorage.setItem(KEY, picked) } catch {}
+  const dark = !theme.dark
+  picked = dark === media.matches ? null : dark ? 'dark' : 'light'
+  try {
+    if (picked) localStorage.setItem(KEY, picked)
+    else localStorage.removeItem(KEY)
+  } catch {}
   apply()
 }
 

@@ -31,12 +31,17 @@
 *.syso
 *.app/
 
-# Your own data: a demo/ or data/ folder, and CSV files anywhere except the
-# test suite. Real exports must never be published by accident.
+# Your own data: a demo/ or data/ folder, and CSV and spreadsheet files
+# anywhere except the test suite. Real exports must never be published by accident.
 /demo/
 /data/
 *.csv
 !/testdata/**/*.csv
+*.xlsx
+*.xlsm
+*.xls
+*.ods
+!/testdata/**/*.xlsx
 
 # Release and download archives
 *.zip

@@ -10,7 +10,7 @@
   // With a linked target file (locked), the output columns are the file's:
   // names, types and order are shown, not edited, and Edit target opens the
   // target editor. Only how each column is filled belongs to the mapping.
-  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser, Sigma, Combine } from '@lucide/svelte'
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser, SquareFunction, Variable, Combine } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
   import CombineDialog from './CombineDialog.svelte'
   import ColumnDetails from './ColumnDetails.svelte'
@@ -316,7 +316,7 @@
       {#if filter && visible.length === 0}<p class="muted pad">No column matches “{filter}”.</p>{/if}
       {#if helpers.length && !filter}
         <div class="helpers">
-          <div class="helpers-head muted"><Sigma size={13} /> Helper columns: read for formulas, not written</div>
+          <div class="helpers-head muted"><Variable size={13} /> Helper columns: read for formulas, not written</div>
           {#each helpers as [name, h] (name)}
             {@const problems = M.issuesFor(issues, name, true)}
             <button class="helper" class:selected={helper === name} onclick={() => (selectedHelper = name)}>
@@ -385,7 +385,7 @@
           {current.default !== undefined ? 'Set a default of this mapping' : 'Fill it with a default value'}</button>
         <p class="muted or">or compute it</p>
         <div class="compute row">
-          <button onclick={() => M.setFill(mapping, current.name, 'formula', current)}><Sigma size={13} /> Formula</button>
+          <button onclick={() => M.setFill(mapping, current.name, 'formula', current)}><SquareFunction size={13} /> Formula</button>
           <button onclick={() => M.setFill(mapping, current.name, 'cases', current)}>⑂ Conditions</button>
           <button onclick={() => M.setFill(mapping, current.name, 'sequence', current)}># Row number</button>
         </div>

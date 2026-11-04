@@ -2,7 +2,7 @@
   // Options of the selected column, in reading order: what was detected in
   // the source, how the source is read, how the output is written. Empty
   // fields are removed, so defaults apply.
-  import { Sparkles, FileInput, FileOutput, ShieldAlert, Replace, Plus, X, ArrowRight, Info, Sigma, Columns3, Trash2, Pin, Split, ListOrdered } from '@lucide/svelte'
+  import { Sparkles, FileInput, FileOutput, ShieldAlert, Replace, Plus, X, ArrowRight, Info, SquareFunction, Columns3, Trash2, Pin, Split, ListOrdered } from '@lucide/svelte'
   import CasesEditor from './CasesEditor.svelte'
   import DefaultField from './DefaultField.svelte'
   import Section from './Section.svelte'
@@ -30,7 +30,7 @@
   $effect(() => { col; pendingSource = false })
   const mode = $derived(pendingSource ? 'source' : M.fillMode(r))
 
-  const MODES = [['source', 'Source', FileInput], ['fixed', 'Fixed value', Pin], ['formula', 'Formula', Sigma],
+  const MODES = [['source', 'Source', FileInput], ['fixed', 'Fixed value', Pin], ['formula', 'Formula', SquareFunction],
     ['cases', 'Conditions', Split], ['sequence', 'Row number', ListOrdered]]
   // Helpers are not written: no fixed value (a formula can be one), no row numbers.
   const modes = $derived(helper ? MODES.filter(([m]) => m !== 'fixed' && m !== 'sequence') : MODES)

@@ -3,7 +3,7 @@
   // Simple conditions ([column] > value, empty tests) get a builder; any
   // other is edited as formula text. Values are written like defaults, or
   // computed by a formula.
-  import { Plus, X, ArrowUp, ArrowDown, Sigma, TextCursorInput } from '@lucide/svelte'
+  import { Plus, X, ArrowUp, ArrowDown, SquareFunction, TextCursorInput } from '@lucide/svelte'
   import FormulaField from './FormulaField.svelte'
   import * as M from './mapping.js'
 
@@ -63,7 +63,7 @@
         <span class="spacer"></span>
         <button class="icon" title={text ? 'Edit with the builder' : 'Edit as formula'} disabled={text && !cond}
           onclick={() => { const s = new Set(asText); s.has(i) ? s.delete(i) : s.add(i); asText = s }}>
-          {#if text}<TextCursorInput size={13} />{:else}<Sigma size={13} />{/if}</button>
+          {#if text}<TextCursorInput size={13} />{:else}<SquareFunction size={13} />{/if}</button>
         <button class="icon" title="Move up" disabled={i === 0} onclick={() => move(i, -1)}><ArrowUp size={13} /></button>
         <button class="icon" title="Move down" disabled={i === r.cases.length - 1} onclick={() => move(i, 1)}><ArrowDown size={13} /></button>
         <button class="icon" title="Remove the case" onclick={() => remove(i)}><X size={13} /></button>
@@ -98,7 +98,7 @@
           <input class="grow" bind:value={k.then} placeholder={placeholder[col.type] ?? 'value'} />
         {/if}
         <button class="icon" class:on={k.then_formula !== undefined} title={k.then_formula !== undefined ? 'Use a fixed value' : 'Compute with a formula'}
-          onclick={() => thenFormula(k, k.then_formula === undefined)}><Sigma size={13} /></button>
+          onclick={() => thenFormula(k, k.then_formula === undefined)}><SquareFunction size={13} /></button>
       </div>
       {#each caseIssues(i) as x}<div class="issue {x.severity}">{x.message}</div>{/each}
     </div>
