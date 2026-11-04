@@ -1,0 +1,12 @@
+# The export appends updates: the last row of each sku wins. A's last
+# row is rejected, so its previous row is kept.
+version: 1
+name: keep-last
+target: target.yaml
+on_error: { strategy: skip_row }
+logging: { level: warnings }
+duplicates: { key: [sku], keep: last }
+columns:
+  sku:     { source: sku }
+  updated: { source: updated }
+  qty:     { source: qty }

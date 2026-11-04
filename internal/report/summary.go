@@ -25,10 +25,18 @@ type Summary struct {
 	RowsWritten    int64 `json:"rows_written"`
 	RowsRejected   int64 `json:"rows_rejected"`
 	RowsWithErrors int64 `json:"rows_with_errors"`
+	// RowsFiltered counts input rows dropped by keep_rows_when.
+	RowsFiltered int64 `json:"rows_filtered,omitempty"`
+	// RowsDuplicate counts output rows dropped as duplicates.
+	RowsDuplicate int64 `json:"rows_duplicate,omitempty"`
 
 	// Columns lists target columns with at least one error, default or warning.
 	Columns         []ColumnStats   `json:"columns,omitempty"`
 	MissingOptional []MissingColumn `json:"missing_optional_columns,omitempty"`
+	// AliasesUsed lists source columns found under another name.
+	AliasesUsed []AliasUse `json:"aliases_used,omitempty"`
+	// UnusedColumns lists input columns no rule reads.
+	UnusedColumns []string `json:"unused_source_columns,omitempty"`
 
 	DurationSeconds float64 `json:"duration_seconds"`
 }
@@ -46,6 +54,15 @@ type MissingColumn struct {
 	Source string `json:"source"` // header name, or "#N" for a position
 	Target string `json:"target"`
 	Action string `json:"action"` // "empty", "default" or "omitted"
+	// Suggestion is the unused input column that looks most like Source.
+	Suggestion string `json:"did_you_mean,omitempty"`
+}
+
+// AliasUse is a source column found through one of its aliases.
+type AliasUse struct {
+	Source string `json:"source"`
+	Alias  string `json:"found_as"`
+	Target string `json:"target"`
 }
 
 // Text renders the summary for humans.
@@ -60,8 +77,15 @@ func (s *Summary) Text() string {
 		if s.Batches > 0 {
 			read += " in " + plural(s.Batches, "batch")
 		}
-		fmt.Fprintf(&b, "summary: ok, %s, %d written, %d rejected, %d with errors, %.2fs\n",
-			read, s.RowsWritten, s.RowsRejected, s.RowsWithErrors, s.DurationSeconds)
+		dropped := ""
+		if s.RowsFiltered > 0 {
+			dropped += fmt.Sprintf(", %d filtered", s.RowsFiltered)
+		}
+		if s.RowsDuplicate > 0 {
+			dropped += fmt.Sprintf(", %d duplicate", s.RowsDuplicate)
+		}
+		fmt.Fprintf(&b, "summary: ok, %s, %d written%s, %d rejected, %d with errors, %.2fs\n",
+			read, s.RowsWritten, dropped, s.RowsRejected, s.RowsWithErrors, s.DurationSeconds)
 	}
 	for _, c := range s.Columns {
 		var parts []string

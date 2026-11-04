@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/S7eezy/lmmtfy/internal/config"
 	"github.com/S7eezy/lmmtfy/internal/csvio"
 	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/report"
@@ -55,6 +56,10 @@ type Job struct {
 	// AggregateAll computes aggregates over the whole input even with
 	// MaxRows, which otherwise limits them too.
 	AggregateAll bool
+	// Sources, when set, receives the input rows of each row written or
+	// rejected, in order: the cells of the source columns rules read
+	// ("#1"… without header). Studio saves them as tests.
+	Sources func(written bool, rows []config.Row)
 }
 
 // Run converts job.Input into job.Output. The summary is always returned,
@@ -74,7 +79,12 @@ func (p *Plan) Run(job Job) (*report.Summary, error) {
 		Status:        "ok",
 	}
 	r := &run{plan: p, job: job, sum: sum, start: start}
-	err := r.run()
+	var err error
+	if p.dups != nil && p.dups.last {
+		err = r.runTwice()
+	} else {
+		err = r.run()
+	}
 	sum.Columns = r.columnStats()
 	sum.DurationSeconds = math.Round(time.Since(start).Seconds()*1000) / 1000
 	if err != nil {
@@ -109,10 +119,13 @@ type run struct {
 	start time.Time
 
 	rawHeader []string
+	header    []string // normalized
+	sourceIdx []int    // the input columns Job.Sources reports
 	width     int
 	cols      []*active // output columns
 	order     []*active // every column, in evaluation order
 	traced    *active   // the column of job.Trace
+	keepAt    int       // order[:keepAt] are the columns keep_rows_when reads
 	numbered  bool      // an output column is a sequence: apply formats rows
 	numberer  *csvio.Formatter
 	numberBuf []byte
@@ -126,6 +139,7 @@ type run struct {
 	writer     *csvio.Writer
 	rejects    *csvio.Writer
 	stats      map[string]*report.ColumnStats
+	dup        dupState
 }
 
 func (r *run) run() error {
@@ -164,15 +178,21 @@ func (r *run) run() error {
 		return err
 	}
 	res := p.resolve(header, r.width)
+	r.reportDrift(res)
 	if len(res.missingRequired) > 0 {
-		return &FileError{Reason: "required source columns missing from input: " + strings.Join(res.missingRequired, ", ")}
+		return res.requiredError()
 	}
+	r.header, r.sourceIdx = header, res.used
 	r.cols, r.order = res.active, res.order
 	for _, a := range r.order {
 		if a.helper {
 			r.helpers = append(r.helpers, a.id)
 		}
+		if a.forKeep {
+			r.keepAt++
+		}
 	}
+	r.prepareDuplicates()
 	if g := p.group; g != nil {
 		for _, name := range g.by {
 			i := slices.Index(header, name)
@@ -180,7 +200,11 @@ func (r *run) run() error {
 				return &FileError{Reason: fmt.Sprintf("group.by: source column %q is not in the input", name)}
 			}
 			r.byIdx = append(r.byIdx, i)
+			if !slices.Contains(r.sourceIdx, i) {
+				r.sourceIdx = append(r.sourceIdx, i)
+			}
 		}
+		slices.Sort(r.sourceIdx)
 	}
 	r.numbered = slices.ContainsFunc(r.cols, func(a *active) bool { return a.seq != nil })
 	if t := r.job.Trace; t != nil {
@@ -283,6 +307,23 @@ func NormalizeHeader(raw []string) (header []string, dup string) {
 	return header, dup
 }
 
+// reportDrift notes input columns found under an alias and input columns
+// no rule reads.
+func (r *run) reportDrift(res resolution) {
+	r.sum.AliasesUsed = res.aliased
+	r.sum.UnusedColumns = res.unused
+	log := r.job.Log
+	if !log.Enabled(report.LevelInfo) {
+		return
+	}
+	for _, a := range res.aliased {
+		log.Info(report.Event{Column: a.Target, Message: fmt.Sprintf("source %q found as %q (alias)", a.Source, a.Alias)})
+	}
+	if len(res.unused) > 0 {
+		log.Info(report.Event{Message: fmt.Sprintf("%d input columns not used: %s", len(res.unused), strings.Join(res.unused, ", "))})
+	}
+}
+
 func (r *run) reportMissing(missing []report.MissingColumn) {
 	if len(missing) == 0 {
 		return
@@ -293,6 +334,9 @@ func (r *run) reportMissing(missing []report.MissingColumn) {
 	for i, m := range missing {
 		names[i] = m.Source
 		fmt.Fprintf(&detail, "\n%s → %s: %s", m.Source, m.Target, r.missingAction(m))
+		if m.Suggestion != "" {
+			fmt.Fprintf(&detail, " (did you mean %q?)", m.Suggestion)
+		}
 	}
 	r.job.Log.Warn(report.Event{Message: fmt.Sprintf("configuration has %d optional columns missing from input: %s%s",
 		len(missing), strings.Join(names, ", "), detail.String())})
@@ -359,6 +403,10 @@ func (r *run) apply(res *rowResult, formatted []byte) error {
 	if log.Enabled(report.LevelTrace) {
 		log.Trace(report.Event{Line: rec.Line, Message: fmt.Sprintf("%q", rec.Fields)})
 	}
+	r.sum.RowsFiltered += int64(res.filtered)
+	if res.dropped {
+		return nil
+	}
 	if res.rowErr != nil {
 		return r.rowError(rows, []cellError{*res.rowErr})
 	}
@@ -391,6 +439,16 @@ func (r *run) apply(res *rowResult, formatted []byte) error {
 	if res.writeErr != nil {
 		return r.rowError(rows, []cellError{*res.writeErr})
 	}
+	if r.duplicate(res) {
+		if !r.dup.dry {
+			r.sum.RowsDuplicate++
+		}
+		if res.defaulted {
+			r.sum.RowsWithErrors++
+			return r.checkMaxErrors()
+		}
+		return nil
+	}
 	if res.cells != nil {
 		var cellErr *cellError
 		if formatted, cellErr = r.number(res.cells); cellErr != nil {
@@ -402,6 +460,7 @@ func (r *run) apply(res *rowResult, formatted []byte) error {
 		return err
 	}
 	r.sum.RowsWritten++
+	r.reportSources(true, rows)
 	if res.defaulted {
 		r.sum.RowsWithErrors++
 		return r.checkMaxErrors()
@@ -456,6 +515,7 @@ func (r *run) rowError(rows []csvio.Record, errs []cellError) error {
 
 func (r *run) reject(rows []csvio.Record, errs []cellError) error {
 	rec := rows[0]
+	r.reportSources(false, rows)
 	r.sum.RowsRejected++
 	r.sum.RowsWithErrors++
 	columns := make([]string, len(errs))
@@ -490,6 +550,30 @@ func (r *run) reject(rows []csvio.Record, errs []cellError) error {
 		}
 	}
 	return r.checkMaxErrors()
+}
+
+// reportSources gives Job.Sources the input rows of an output row.
+func (r *run) reportSources(written bool, recs []csvio.Record) {
+	if r.job.Sources == nil {
+		return
+	}
+	rows := make([]config.Row, len(recs))
+	for i, rec := range recs {
+		row := make(config.Row, 0, len(r.sourceIdx))
+		for _, idx := range r.sourceIdx {
+			name := fmt.Sprintf("#%d", idx+1)
+			if r.header != nil {
+				name = r.header[idx]
+			}
+			v := ""
+			if idx < len(rec.Fields) {
+				v = rec.Fields[idx]
+			}
+			row = append(row, config.Cell{Column: name, Value: v})
+		}
+		rows[i] = row
+	}
+	r.job.Sources(written, rows)
 }
 
 func (r *run) checkMaxErrors() error {

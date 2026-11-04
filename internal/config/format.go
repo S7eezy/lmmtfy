@@ -19,8 +19,11 @@ type document struct {
 	OnError     OnError       `yaml:"on_error"`
 	Logging     Logging       `yaml:"logging,omitempty"`
 	Group       *Group        `yaml:"group,omitempty"`
+	KeepRows    string        `yaml:"keep_rows_when,omitempty"`
+	Duplicates  *Duplicates   `yaml:"duplicates,omitempty"`
 	Helpers     yaml.MapSlice `yaml:"helpers,omitempty"`
 	Columns     yaml.MapSlice `yaml:"columns"`
+	Tests       []Test        `yaml:"tests,omitempty"`
 }
 
 // Format serializes a mapping for people to read and edit: rules in target
@@ -36,6 +39,9 @@ func Format(m *Mapping, targetPath string, opts ...yaml.EncodeOption) ([]byte, e
 		OnError:     m.OnError,
 		Logging:     m.Logging,
 		Group:       m.Group,
+		KeepRows:    m.KeepRowsWhen,
+		Duplicates:  m.Duplicates,
+		Tests:       m.Tests,
 	}
 	if targetPath != "" {
 		doc.Target = targetPath

@@ -11,6 +11,7 @@ testdata/<case-name>/
 ├── report.json       expected summary (hash and duration replaced by placeholders)
 ├── log.txt           expected log and error messages (paths and durations replaced)
 ├── exit_code         expected process exit code
+├── test.txt          expected `lmmtfy test` output, when the mapping has tests
 ├── inspect.txt       expected `lmmtfy inspect` output
 └── init.yaml         expected `lmmtfy init` mapping (which must convert input.csv)
 ```

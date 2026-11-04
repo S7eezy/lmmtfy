@@ -1,0 +1,18 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ";"
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       2 rows (whole file)
+
+  #  column            target            type     ok    details               examples
+  1  N° commande       N_commande        integer  100%                        "1", "2"
+  2  Date de commande  Date_de_commande  date     100%  formats DD/MM/YYYY    "03/02/2024", "04/02/2024"
+  3  Amounts           Amounts           decimal  100%  decimal ".", scale 1  "12.5", "7"
+  4  comment           comment           string   100%  max 5 chars, 1 empty  "first"
+  5  channel           channel           string   100%  max 4 chars           "web", "shop"
+
+notes:
+  - Date de commande: day/month order is ambiguous: read as DD/MM/YYYY, could be MM/DD/YYYY

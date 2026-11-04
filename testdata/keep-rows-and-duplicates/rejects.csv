@@ -1,0 +1,2 @@
+id,status,amount,_line,_column,_error
+3,OK,abc,5,amount,"""abc"" is not a decimal number"

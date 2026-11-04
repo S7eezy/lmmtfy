@@ -1,4 +1,4 @@
-// Command lmmtfy is the command-line tool: convert, validate, inspect, init and build.
+// Command lmmtfy is the command-line tool: convert, validate, test, inspect, init and build.
 package main
 
 import (
@@ -25,6 +25,7 @@ Usage:
 Commands:
   convert   convert a CSV file with a mapping
   validate  check a mapping, and optionally an input file against it
+  test      run the tests saved in a mapping
   inspect   detect the format and column types of a CSV file
   init      write a draft mapping for a CSV file
   build     create a standalone converter from a mapping
@@ -50,6 +51,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdConvert(args[1:], stderr, time.Now)
 	case "validate":
 		return cmdValidate(args[1:], stdout, stderr)
+	case "test":
+		return cmdTest(args[1:], stdout, stderr)
 	case "inspect":
 		return cmdInspect(args[1:], stdout, stderr)
 	case "init":
@@ -123,6 +126,26 @@ func cmdValidate(args []string, stdout, stderr io.Writer) int {
 		return exitcode.Usage
 	}
 	return app.Validate("lmmtfy", *mapping, *input, stdout, stderr)
+}
+
+func cmdTest(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("test", "--mapping <mapping.yaml>", stderr)
+	mapping := fs.String("mapping", "", "mapping file (required)")
+
+	pos, code := app.ParseArgs(fs, args)
+	if code >= 0 {
+		return code
+	}
+	if len(pos) == 1 && *mapping == "" {
+		*mapping = pos[0] // lmmtfy test mapping.yaml
+		pos = nil
+	}
+	if len(pos) != 0 || *mapping == "" {
+		fmt.Fprintln(stderr, "lmmtfy test: need --mapping")
+		fs.Usage()
+		return exitcode.Usage
+	}
+	return app.Test("lmmtfy", *mapping, stdout, stderr)
 }
 
 func cmdInspect(args []string, stdout, stderr io.Writer) int {

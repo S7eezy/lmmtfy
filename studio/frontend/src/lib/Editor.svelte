@@ -10,9 +10,13 @@
   // With a linked target file (locked), the output columns are the file's:
   // names, types and order are shown, not edited, and Edit target opens the
   // target editor. Only how each column is filled belongs to the mapping.
-  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser, SquareFunction, Variable, Combine } from '@lucide/svelte'
+  import { Columns3, Plus, Search, GripVertical, ArrowRight, Trash2, TriangleAlert, CircleAlert, Table, Ban, MessageSquareWarning, FileSpreadsheet, ListChecks, CircleHelp, Info, Check, Link, Lock, PencilRuler, Eraser, SquareFunction, Variable, Combine, ListFilter, Pin, FlaskConical } from '@lucide/svelte'
   import DataTable from './DataTable.svelte'
   import CombineDialog from './CombineDialog.svelte'
+  import RowsDialog from './RowsDialog.svelte'
+  import TestsPanel from './TestsPanel.svelte'
+  import * as api from './api.js'
+  import { toast } from './toast.svelte.js'
   import ColumnDetails from './ColumnDetails.svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
@@ -30,7 +34,8 @@
 
   const cols = $derived(M.columns(mapping))
   const helpers = $derived(Object.entries(mapping.helpers ?? {}))
-  const used = $derived(new Set([...Object.values(mapping.columns ?? {}).map((r) => M.sourceKey(r)), ...helpers.map(([, h]) => M.sourceKey(h))]))
+  // Source columns rules read, under their name or another one (aliases).
+  const used = $derived(new Set([...Object.values(mapping.columns ?? {}), ...helpers.map(([, h]) => h)].flatMap((r) => [M.sourceKey(r), ...(r.aliases ?? [])])))
   // Combined rows: numbered columns filled by a pattern show as one row,
   // the pattern's, at the place of its first column.
   let combining = $state(false)
@@ -131,10 +136,14 @@
       for (const p of (byColumn.get(col.name) ?? []).filter((p) => p.severity === 'error')) {
         items.push({ level: 'error', i, name: col.name, text: p.message })
       }
-      if (key && sources.length && !sourceOf(key)) {
+      const alias = key && sources.length && !sourceOf(key) && (r.aliases ?? []).find((a) => sourceOf(a))
+      if (alias) {
+        items.push({ level: 'info', i, name: col.name, text: `Source column “${key}” is found as “${alias}”, one of its other names.` })
+      } else if (key && sources.length && !sourceOf(key)) {
         const optional = r.if_missing && r.if_missing !== 'error'
-        items.push({ level: optional ? 'info' : 'error', i, name: col.name, action: 'map',
-          text: `Source column “${key}” is not in this file${optional ? ' (optional: handled)' : ''}.` })
+        const like = r.source !== undefined ? M.suggestHeader(key, unused.filter((s) => !s.index).map((s) => s.name)) : ''
+        items.push({ level: optional ? 'info' : 'error', i, name: col.name, action: like ? 'alias' : 'map', rule: r, like,
+          text: `Source column “${key}” is not in this file${optional ? ' (optional: handled)' : ''}.${like ? ` Renamed to “${like}”?` : ''}` })
       }
       if (autoMatched.includes(col.name) && !confirmed.has(col.name)) {
         items.push({ level: 'check', i, name: col.name, action: 'confirm', text: `Matched by name to source “${key}”. Is it the right column?` })
@@ -184,8 +193,9 @@
     if (!key && r.formula !== undefined) return `ƒ ${r.formula || '…'}`
     if (!key && r.default_formula !== undefined) return `= ${r.default_formula || '…'}`
     if (!key) return '— none: default value —'
-    if (r.formula) return `${sourceOf(key) || !sources.length ? key : `${key} (not in this file)`} · ƒ`
-    return sourceOf(key) || !sources.length ? key : `${key} (not in this file)`
+    const alias = !sourceOf(key) && (r.aliases ?? []).find((a) => sourceOf(a))
+    const shown = sourceOf(key) || !sources.length ? key : alias ? `${key} (as ${alias})` : `${key} (not in this file)`
+    return r.formula ? `${shown} · ƒ` : shown
   }
 
   function addFrom(source) {
@@ -198,6 +208,41 @@
     selected = Math.max(0, Math.min(selected, cols.length - 1))
   }
 
+  // Rows: keep_rows_when and duplicates.
+  let rowsOpen = $state(false)
+  const rowsRules = $derived([
+    mapping.keep_rows_when?.trim() && `kept when ${mapping.keep_rows_when.trim()}`,
+    mapping.duplicates?.key?.length && `duplicates of ${mapping.duplicates.key.join(', ')} dropped (${mapping.duplicates.keep === 'last' ? 'last' : 'first'} kept)`,
+  ].filter(Boolean))
+
+  // Saved tests run after every change, once the mapping is valid.
+  let testResults = $state(null)
+  $effect(() => {
+    const snapshot = JSON.parse(JSON.stringify(mapping))
+    testResults = null
+    if (!snapshot.tests?.length || errors.length) return
+    const t = setTimeout(() => api.runTests(snapshot).then((r) => (testResults = r ?? [])).catch(() => {}), 300)
+    return () => clearTimeout(t)
+  })
+  const failing = $derived((testResults ?? []).filter((r) => !r.passed).length)
+
+  // Pinning a previewed row saves its input rows as a test, expecting what
+  // the mapping gives now.
+  async function pin(input, what) {
+    const base = `${what} of ${samplePath.split(/[\\/]/).pop()}`
+    const names = new Set((mapping.tests ?? []).map((t) => t.name))
+    let name = base
+    for (let n = 2; names.has(name); n++) name = `${base} (${n})`
+    try {
+      const t = await api.makeTest(mapping, name, input)
+      mapping.tests = [...(mapping.tests ?? []), t]
+      chosenTab = 'tests'
+      toast('ok', `Saved “${name}” as a test: rename it, then save the mapping.`)
+    } catch (e) {
+      toast('error', String(e?.message ?? e))
+    }
+  }
+
   let listEl = $state(null)
   let bodyEl = $state(null)
   const reorder = new Reorder({
@@ -208,6 +253,13 @@
 
 <svelte:window onkeydown={reorder.cancel} />
 
+{#snippet pinOutput(i)}
+  {#if preview.sources[i]}<button class="pin" onclick={() => pin(preview.sources[i], `Output row ${i + 1}`)} title="Save this row as a test: its input, and the output it gives now"><Pin size={12} /></button>{/if}
+{/snippet}
+{#snippet pinRejected(i)}
+  {#if preview.rejected_sources[i]}<button class="pin" onclick={() => pin(preview.rejected_sources[i], `Rejected row ${i + 1}`)} title="Save this row as a test: its input, and the errors it gives now"><Pin size={12} /></button>{/if}
+{/snippet}
+
 <div class="layout" class:dragging={!!reorder.drag}>
   <section class="panel columns">
     <div class="head row">
@@ -217,6 +269,7 @@
       {#if toReview}<button class="to-review" onclick={() => (chosenTab = 'review')}><ListChecks size={13} /> {toReview} to review</button>{/if}
       <label class="search"><Search size={14} /><input type="search" bind:value={filter} placeholder="Filter columns…" /></label>
       <span class="spacer"></span>
+      <button onclick={() => (rowsOpen = true)} title="Keep rows on a condition, drop duplicate rows" class:active-rule={rowsRules.length}><ListFilter size={14} /> Rows</button>
       <button onclick={() => (combining = true)} title="Several input rows make one output row"><Combine size={14} /> {mapping.group ? 'Combined rows' : 'Combine rows'}</button>
       {#if !locked}<button onclick={() => addFrom(null)}><Plus size={14} /> Add column</button>{/if}
     </div>
@@ -231,6 +284,14 @@
         <span>This target repeats {family.patterns.length === 1 ? 'a column' : `${family.patterns.length} columns`} {family.numbers.length} times ({family.patterns.join(', ')}). Do several input rows make one output row?</span>
         <span class="spacer"></span>
         <button onclick={() => (combining = true)}>Combine rows…</button>
+      </div>
+    {/if}
+    {#if rowsRules.length}
+      <div class="locked row combined rows-rules">
+        <ListFilter size={14} />
+        <span class="mono-ish">Rows {rowsRules.join('; ')}.{#if preview?.summary && (preview.summary.rows_filtered || preview.summary.rows_duplicate)} {' '}<span class="muted">Preview: {[preview.summary.rows_filtered && `${preview.summary.rows_filtered} filtered`, preview.summary.rows_duplicate && `${preview.summary.rows_duplicate} duplicate`].filter(Boolean).join(', ')}.</span>{/if}</span>
+        <span class="spacer"></span>
+        <button onclick={() => (rowsOpen = true)}>Change…</button>
       </div>
     {/if}
     {#if locked}
@@ -278,7 +339,7 @@
                       <option value="⑂">⑂ conditions</option>
                       <option value="#"># row number</option>
                       {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
-                      {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{M.sourceKey(r)}{sources.length ? ' (not in this file)' : ''}</option>{/if}
+                      {#if M.sourceKey(r) && !sourceOf(M.sourceKey(r))}<option value={M.sourceKey(r)}>{sourceLabel(r)}</option>{/if}
                     </select>
                   {:else}
                     <span class="source" class:none={M.fillMode(r) === 'fixed' && r?.default_formula === undefined} class:formula={!M.sourceKey(r) && (M.fillMode(r) !== 'fixed' || r?.default_formula !== undefined)} title={r?.formula ?? ''}>{sourceLabel(r)}</span>
@@ -345,6 +406,10 @@
     </div>
   </section>
 
+  {#if rowsOpen}
+    <RowsDialog bind:mapping {issues} {sources} {preview} detectedFor={detectSource} onclose={() => (rowsOpen = false)} />
+  {/if}
+
   {#if combining}
     <CombineDialog {mapping} {sources} {samplePath} detectedFor={detectSource} onclose={() => (combining = false)} />
   {/if}
@@ -401,6 +466,7 @@
       <button class:active={tab === 'output'} onclick={() => (chosenTab = 'output')}><Table size={14} /> Output {#if preview?.rows}<span class="badge">{preview.rows.length}</span>{/if}</button>
       <button class:active={tab === 'rejected'} onclick={() => (chosenTab = 'rejected')}><Ban size={14} /> Rejected {#if preview?.rejected?.length}<span class="badge error">{preview.rejected.length - 1}</span>{/if}</button>
       <button class:active={tab === 'events'} onclick={() => (chosenTab = 'events')}><MessageSquareWarning size={14} /> Messages {#if preview?.events?.length}<span class="badge warn">{preview.events.length}</span>{/if}</button>
+      <button class:active={tab === 'tests'} onclick={() => (chosenTab = 'tests')}><FlaskConical size={14} /> Tests {#if failing}<span class="badge error">{failing} failing</span>{:else if mapping.tests?.length}<span class="badge">{mapping.tests.length}</span>{/if}</button>
       <span class="spacer"></span>
       {#if hasInput && !mapping.group && M.usesAggregates(mapping)}
         <label class="inline whole" title="Aggregates (lowest, total, …) cover the previewed rows unless this is on. Conversions always use the whole file.">
@@ -417,7 +483,9 @@
       <div class="failure"><CircleAlert size={15} /> <span><strong>The preview conversion fails:</strong> {preview.failure}</span></div>
     {/if}
     <div class="tabbody">
-      {#if errors.length && tab !== 'review'}
+      {#if tab === 'tests'}
+        <TestsPanel {mapping} results={testResults} hasErrors={errors.length > 0} />
+      {:else if errors.length && tab !== 'review'}
         <div class="pad">{#each errors as i}<div class="issue error">{i.path}: {i.message}</div>{/each}</div>
       {:else if tab === 'review'}
         <div class="review">
@@ -436,6 +504,10 @@
               {:else if item.action === 'drop'}<span class="col mono">{item.name}</span>{/if}
               <span class="text">{item.text}</span>
               {#if item.action === 'map'}<button onclick={() => focusColumn(item.i)}><Link size={13} /> Choose a source</button>{/if}
+              {#if item.action === 'alias'}
+                <button onclick={() => M.addAlias(item.rule, item.like)} title="Adds “{item.like}” as another name of the source: files with either name convert"><Link size={13} /> Also accept “{item.like}”</button>
+                <button onclick={() => focusColumn(item.i)}>Choose a source</button>
+              {/if}
               {#if item.action === 'confirm'}
                 <button onclick={() => focusColumn(item.i)}>Show</button>
                 <button onclick={() => confirm(item.name)}><Check size={13} /> Looks right</button>
@@ -450,9 +522,9 @@
           {/each}
         </div>
       {:else if tab === 'output'}
-        <DataTable header={preview?.header} rows={preview?.rows ?? []} empty="No output rows" {highlight} />
+        <DataTable header={preview?.header} rows={preview?.rows ?? []} empty="No output rows" {highlight} action={preview?.sources ? pinOutput : null} />
       {:else if tab === 'rejected'}
-        <DataTable header={preview?.rejected?.[0]} rows={preview?.rejected?.slice(1) ?? []} rowClass={() => 'rejected'} empty="No rejected rows" />
+        <DataTable header={preview?.rejected?.[0]} rows={preview?.rejected?.slice(1) ?? []} rowClass={() => 'rejected'} empty="No rejected rows" action={preview?.rejected_sources ? pinRejected : null} />
       {:else}
         <div class="pad">
           {#each preview?.events ?? [] as e}
@@ -573,4 +645,8 @@
   .tabs button.active { background: var(--soft); color: var(--accent); font-weight: 600; }
   .tabbody { flex: 1; min-height: 0; overflow: auto; }
   .pad, .details { padding: 12px 16px; }
+  .pin { border: none; background: none; padding: 2px 3px; color: var(--muted); display: inline-flex; opacity: 0.55; }
+  .pin:hover { color: var(--accent); opacity: 1; }
+  .active-rule { border-color: var(--accent); color: var(--accent); }
+  .rows-rules .mono-ish { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

@@ -112,26 +112,53 @@ func (r *run) computeGroup(res *rowResult, b *batch, w *worker, items []item) {
 		fields[i] = f
 	}
 
-	// Helpers, for each row.
+	// Helpers, for each row; with keep_rows_when, the ones it reads, then
+	// the condition, then the others.
 	w.reset()
 	rejected := false
 	vals := make([][]expr.Value, len(items))
+	order := make([]int, 0, len(items)) // the rows kept
 	for i := range items {
 		w.env.Row = items[i].row
-		for _, c := range r.order {
+		events, defaulted := len(res.events), res.defaulted
+		keep := true
+		for j, c := range r.order {
+			if p.keep != nil && j == r.keepAt {
+				var err error
+				if keep, err = r.keeps(w); err != nil {
+					res.rowErr = &cellError{"", fmt.Sprintf("line %d: %s: %v", items[i].rec.Line, keepPath, err)}
+					return
+				}
+				if !keep {
+					break
+				}
+			}
 			if c.helper && r.fill(c, fields[i], w, res, &rejected) {
+				return
+			}
+		}
+		if keep && p.keep != nil && r.keepAt == len(r.order) {
+			var err error
+			if keep, err = r.keeps(w); err != nil {
+				res.rowErr = &cellError{"", fmt.Sprintf("line %d: %s: %v", items[i].rec.Line, keepPath, err)}
 				return
 			}
 		}
 		if rejected {
 			return
 		}
+		if !keep {
+			res.events, res.defaulted = res.events[:events], defaulted
+			w.reset()
+			res.filtered++
+			continue
+		}
 		vals[i] = slices.Clone(w.env.Columns)
+		order = append(order, i)
 	}
-
-	order := make([]int, len(items))
-	for i := range order {
-		order[i] = i
+	if len(order) == 0 {
+		*res = rowResult{rec: res.rec, recs: res.recs, filtered: len(items), dropped: true}
+		return
 	}
 	if len(g.orderBy) > 0 {
 		slices.SortStableFunc(order, func(a, b int) int {

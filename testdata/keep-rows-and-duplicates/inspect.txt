@@ -1,0 +1,16 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       7 rows (whole file)
+
+  #  column  target  type     ok    details               examples
+  1  id      id      integer  100%                        "1", "2", "3"
+  2  status  status  string   100%  max 4 chars, 1 empty  "OK", "TEST"
+  3  amount  amount  string   100%  max 3 chars           "10", "abc", "11"
+
+notes:
+  - amount: 71% of values read as decimal; rejected: abc

@@ -1,0 +1,17 @@
+{
+  "mapping": "suggestion",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "failed",
+  "failure_reason": "required source columns missing from input: \"Order ID\" (for order_id; did you mean \"order_id\"?), \"Order date\" (for order_date; did you mean \"ORDER_DATE\"?), \"amount\" (for amount)",
+  "rows_read": 0,
+  "rows_written": 0,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "unused_source_columns": [
+    "order_id",
+    "ORDER_DATE",
+    "Montant"
+  ],
+  "duration_seconds": 0
+}

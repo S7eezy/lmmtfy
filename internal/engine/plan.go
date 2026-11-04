@@ -42,6 +42,9 @@ type Plan struct {
 	passCols   map[int]bool      // columns the first pass computes, for aggregates
 
 	group *groupPlan // nil unless rows are combined
+
+	keep *expr.Program // keep_rows_when, nil without
+	dups *dupPlan      // duplicates, nil without
 }
 
 // column is the compiled rule of one target column, or of a helper.
@@ -56,7 +59,8 @@ type column struct {
 	numeric   bool
 	hasSource bool
 	source    string // header name
-	index     int    // 0-based position when the rule uses source_index, else -1
+	aliases   []string
+	index     int // 0-based position when the rule uses source_index, else -1
 
 	ifMissing string
 	ifEmpty   string
@@ -77,6 +81,7 @@ type column struct {
 	cases      *cases
 	seq        *sequence
 	refs       []int // ids of the columns its formulas read, in order of appearance
+	forKeep    bool  // keep_rows_when reads it, directly or not: computed first
 
 	defaultFormula *expr.Program     // the default, computed once per file
 	aggs           []*expr.Aggregate // in its default formula, then in its formulas
@@ -183,6 +188,7 @@ func Compile(m *config.Mapping) (*Plan, config.Issues) {
 		p.group = &groupPlan{by: g.By, sorted: *g.Sorted, overflow: g.Overflow, slots: len(slots.Numbers)}
 	}
 	p.compileFormulas(&issues)
+	p.compileDuplicates(&issues)
 	if p.group != nil {
 		p.compileGroup(&issues)
 	}
@@ -233,6 +239,9 @@ func compileColumn(issues *config.Issues, m *config.Mapping, tc config.TargetCol
 	}
 	if rule.Source != nil {
 		c.source = strings.TrimSpace(string(*rule.Source))
+	}
+	for _, a := range rule.Aliases {
+		c.aliases = append(c.aliases, strings.TrimSpace(string(a)))
 	}
 	if rule.Trim != nil {
 		c.trim = *rule.Trim

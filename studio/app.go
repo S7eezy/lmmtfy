@@ -8,6 +8,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/S7eezy/lmmtfy/internal/config"
+	"github.com/S7eezy/lmmtfy/internal/engine"
 	"github.com/S7eezy/lmmtfy/internal/expr"
 	"github.com/S7eezy/lmmtfy/internal/studio"
 	"github.com/S7eezy/lmmtfy/internal/version"
@@ -91,6 +92,16 @@ func (a *App) CheckFormula(m config.Mapping, path, src string) studio.FormulaChe
 }
 
 func (a *App) Functions() []expr.Doc { return studio.Functions() }
+
+func (a *App) RunTests(m config.Mapping) []engine.TestResult { return studio.RunTests(&m) }
+
+func (a *App) MakeTest(m config.Mapping, name string, input []config.Row) (*config.Test, error) {
+	return studio.MakeTest(&m, name, input)
+}
+
+func (a *App) CheckInput(path string, m config.Mapping) (*studio.InputCheck, error) {
+	return studio.CheckInput(path, &m)
+}
 
 func (a *App) Batches(path string, m config.Mapping, by []string) (*studio.BatchStats, error) {
 	return studio.Batches(path, &m, by)

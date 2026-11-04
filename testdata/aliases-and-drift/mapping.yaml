@@ -1,0 +1,12 @@
+# The export renamed its columns: aliases find them, and the summary says
+# which alias was used and which input columns are not read.
+version: 1
+name: aliases
+target: target.yaml
+input: { delimiter: ";" }
+logging: { level: info }
+columns:
+  order_id:   { source: id, aliases: ["Order ID", "N° commande"] }
+  order_date: { source: date, aliases: ["Date de commande"], formats: ["DD/MM/YYYY"] }
+  amount:     { source: amount, optional: true }
+  comment:    { source: comment }

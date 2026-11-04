@@ -519,3 +519,56 @@ export function uncombine(m) {
     delete m.columns[key]
   }
 }
+
+// Files drift: a source column gets renamed. suggestHeader returns the
+// header that looks most like name (same rule as the engine: equal
+// ignoring case, accents, spaces and punctuation, else a small edit
+// distance), or ''.
+export function suggestHeader(name, headers) {
+  const key = looseName(name)
+  if (!key) return ''
+  let best = '', bestDist = Math.max(1, Math.floor([...key].length / 4)) + 1
+  for (const h of headers) {
+    const k = looseName(h)
+    if (!k) continue
+    if (k === key) return h
+    const d = editDistance(key, k, bestDist)
+    if (d < bestDist) { best = h; bestDist = d }
+  }
+  return best
+}
+
+const FOLDS = { æ: 'ae', œ: 'oe', ß: 'ss', ø: 'o' }
+function looseName(s) {
+  return [...String(s).toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')]
+    .map((c) => FOLDS[c] ?? c).join('').replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+function editDistance(a, b, limit) {
+  a = [...a]; b = [...b]
+  if (Math.abs(a.length - b.length) >= limit) return limit
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    let low = i
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      low = Math.min(low, cur[j])
+    }
+    if (low >= limit) return limit
+    prev = cur
+  }
+  return Math.min(prev[b.length], limit)
+}
+
+// addAlias makes a rule accept another header name for its source.
+export function addAlias(r, name) {
+  name = String(name ?? '').trim()
+  if (!name || name === r.source || (r.aliases ?? []).includes(name)) return
+  r.aliases = [...(r.aliases ?? []), name]
+}
+
+export function removeAlias(r, i) {
+  r.aliases.splice(i, 1)
+  if (!r.aliases.length) delete r.aliases
+}

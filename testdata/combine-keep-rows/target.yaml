@@ -1,0 +1,9 @@
+version: 1
+name: batches
+output: { line_ending: lf }
+columns:
+  - { name: batch,    type: string, required: true }
+  - { name: object_0, type: string }
+  - { name: object_1, type: string }
+  - { name: lines,    type: integer }
+  - { name: total,    type: decimal, scale: 2 }

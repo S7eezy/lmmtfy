@@ -126,9 +126,23 @@
         <select value={sourceKey(r)} onchange={(e) => pick(e.target.value)}>
           {#if !hasSource}<option value="" disabled>Choose a source column…</option>{/if}
           {#each sources as s}<option value={s.key}>{s.label}</option>{/each}
-          {#if hasSource && !sources.some((s) => s.key === sourceKey(r))}<option value={sourceKey(r)}>{sourceKey(r)}{sources.length ? ' (not in this file)' : ''}</option>{/if}
+          {#if hasSource && !sources.some((s) => s.key === sourceKey(r))}
+            {@const alias = (r.aliases ?? []).find((a) => sources.some((s) => s.key === a))}
+            <option value={sourceKey(r)}>{sourceKey(r)}{!sources.length ? '' : alias ? ` (as ${alias})` : ' (not in this file)'}</option>
+          {/if}
         </select>
       </label>
+      {#if r.source !== undefined}
+        <div class="aliases" title="Other header names of this source column, tried in order when a file does not have “{r.source}”. A renamed column is found without changing the mapping.">
+          <span class="muted small">Also named</span>
+          {#each r.aliases ?? [] as a, i (a)}
+            <span class="chip alias">{a}<button class="icon" onclick={() => M.removeAlias(r, i)} aria-label="Remove {a}" title="Remove"><X size={11} /></button></span>
+          {/each}
+          <input class="alias-input" placeholder={r.aliases?.length ? 'another name…' : 'other header names, Enter to add'}
+            onkeydown={(e) => { if (e.key === 'Enter') { M.addAlias(r, e.target.value); e.target.value = '' } }}
+            onblur={(e) => { M.addAlias(r, e.target.value); e.target.value = '' }} />
+        </div>
+      {/if}
       {#if hasSource}
         {#if r.formula === undefined}
           <button class="link add-formula" onclick={() => (r.formula = '')}><Plus size={13} /> Change the value with a formula</button>
@@ -288,6 +302,12 @@
 </div>
 
 <style>
+  .aliases { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 6px; }
+  .aliases .small { font-size: 12px; }
+  .chip.alias { display: inline-flex; gap: 2px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 1px 4px 1px 9px; font-size: 12px; font-family: var(--mono); }
+  .chip.alias button { padding: 1px; border: none; background: none; color: var(--muted); }
+  .chip.alias button:hover { color: var(--error); }
+  .alias-input { flex: 1; min-width: 140px; font-size: 12px; padding: 2px 7px; }
   .details { padding: 12px 16px 20px; }
   .title { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
   .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); }

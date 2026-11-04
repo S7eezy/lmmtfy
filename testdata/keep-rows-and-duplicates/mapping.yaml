@@ -1,0 +1,38 @@
+# Test rows are dropped before their amount is read: no error. Order 1
+# appears twice: the first is kept. The first order 3 is rejected, so the
+# second one is kept. An empty status makes the comparison false: dropped.
+# The last test fails on purpose.
+version: 1
+name: keep-rows
+target: target.yaml
+on_error: { strategy: skip_row }
+logging: { level: warnings }
+keep_rows_when: '[status] <> "TEST"'
+duplicates: { key: [order_id] }
+columns:
+  line:     { sequence: {} }
+  order_id: { source: id }
+  status:   { source: status }
+  amount:   { source: amount }
+tests:
+  - name: test rows are dropped
+    input:
+      - { id: "9", status: TEST, amount: "abc" }
+    output: []
+  - name: the first of two orders is kept
+    input:
+      - { id: "7", status: OK, amount: "1" }
+      - { id: "7", status: OK, amount: "2" }
+    output:
+      - { line: "1", order_id: "7", amount: "1.00" }
+  - name: a bad amount is rejected
+    input:
+      - { id: "8", status: OK, amount: "12,5" }
+    output: []
+    errors: ["amount"]
+  # Fails on purpose, to show what a failure looks like.
+  - name: amounts keep their decimals
+    input:
+      - { id: "1", status: OK, amount: "1.555" }
+    output:
+      - { amount: "1.555" }

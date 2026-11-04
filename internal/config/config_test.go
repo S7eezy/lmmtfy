@@ -190,6 +190,25 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			name:    "aliases",
+			columns: "id: { source: ID, aliases: [Id, ID, ''] }\n  code: { source_index: 2, aliases: [C] }\n  country: { source: K }",
+			want: []string{
+				`warning: columns.id.aliases[1]: "ID" is already listed`,
+				"error: columns.id.aliases[2]: empty",
+				"error: columns.code.aliases: aliases are other names of the source header: they need source",
+			},
+		},
+		{
+			name:    "tests",
+			columns: "id: { source: ID }\n  code: { source: C }\n  country: { source: K }",
+			extra:   "tests:\n  - { name: a, input: [{ ID: '1' }], output: [{ nope: x }] }\n  - { name: a, input: [] }\n",
+			want: []string{
+				"error: tests[0].output[0].nope: not a target column",
+				`error: tests[1].name: another test has the name "a"`,
+				"error: tests[1].input: at least one input row is required",
+			},
+		},
+		{
 			name:    "required default strategy needs default",
 			columns: "id: { source: ID, on_error: default }\n  code: { source: C }\n  country: { source: K }",
 			want:    []string{"error: columns.id.on_error: on_error: default on a required column requires a default"},
@@ -326,5 +345,35 @@ func TestGroupRoundTrip(t *testing.T) {
 	}
 	if back.Columns["price_{n}"].Formula != "[price]" {
 		t.Errorf("pattern rule lost:\n%s", data)
+	}
+}
+
+func TestTestsRoundTrip(t *testing.T) {
+	m, err := LoadMapping("../../testdata/keep-rows-and-duplicates/mapping.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := Validate(m); len(issues) != 0 {
+		t.Fatalf("issues: %v", issues)
+	}
+	data, err := Format(m, "target.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ParseMapping(data)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, data)
+	}
+	if back.KeepRowsWhen != m.KeepRowsWhen || back.Duplicates == nil || back.Duplicates.Key[0] != "order_id" {
+		t.Errorf("rows options lost:\n%s", data)
+	}
+	if len(back.Tests) != 4 || back.Tests[1].Input[1][2] != (Cell{"amount", "2"}) || len(back.Tests[0].Output) != 0 {
+		t.Errorf("tests: %+v\n%s", back.Tests, data)
+	}
+	// Tests are not part of the hash.
+	h1, _ := Hash(m)
+	m.Tests = nil
+	if h2, _ := Hash(m); h1 != h2 {
+		t.Error("tests change the hash")
 	}
 }

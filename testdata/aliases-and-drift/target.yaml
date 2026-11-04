@@ -1,0 +1,11 @@
+version: 1
+name: erp-orders
+output:
+  encoding: utf-8
+  delimiter: ","
+  line_ending: crlf
+columns:
+  - { name: order_id,   type: integer, required: true }
+  - { name: order_date, type: date, format: "YYYY-MM-DD", required: true }
+  - { name: amount,     type: decimal, scale: 2 }
+  - { name: comment,    type: string }

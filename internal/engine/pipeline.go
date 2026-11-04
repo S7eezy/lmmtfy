@@ -52,6 +52,9 @@ type rowResult struct {
 	trace      *TraceRow // how the traced column was filled
 	cells      []string  // the output row when apply numbers it (sequences)
 	start, end int       // formatted row in batch.out
+	filtered   int       // input rows dropped by keep_rows_when
+	dropped    bool      // no output row: every input row was filtered
+	key        string    // the duplicates key, when the mapping has one
 }
 
 type eventKind int
@@ -231,7 +234,36 @@ func (r *run) computeRow(res *rowResult, b *batch, w *worker) {
 
 	w.reset()
 	rejected := false
-	for _, c := range r.order {
+	order := r.order
+	if p.keep != nil {
+		// The columns the condition reads, then the condition.
+		if r.fillRow(order[:r.keepAt], fields, w, res, &rejected) {
+			return
+		}
+		keep, err := r.keeps(w)
+		switch {
+		case err != nil:
+			res.rowErr = &cellError{"", keepPath + ": " + err.Error()}
+			return
+		case !keep:
+			*res = rowResult{rec: res.rec, filtered: 1, dropped: true}
+			return
+		}
+		order = order[r.keepAt:]
+	}
+	if r.fillRow(order, fields, w, res, &rejected) {
+		return
+	}
+	if !rejected {
+		r.finish(res, b, w)
+	}
+}
+
+// fillRow computes columns of a row, in order; stop is true when the file
+// fails.
+func (r *run) fillRow(order []*active, fields []string, w *worker, res *rowResult, rejected *bool) (stop bool) {
+	p := r.plan
+	for _, c := range order {
 		// The hot path, inline: a plain cell converting without error.
 		// Anything else goes through fill (which converts it again).
 		if !c.computes() && c != r.traced {
@@ -244,13 +276,11 @@ func (r *run) computeRow(res *rowResult, b *batch, w *worker) {
 				}
 			}
 		}
-		if r.fill(c, fields, w, res, &rejected) {
-			return
+		if r.fill(c, fields, w, res, rejected) {
+			return true
 		}
 	}
-	if !rejected {
-		r.finish(res, b, w)
-	}
+	return false
 }
 
 // fill computes one column of a row: its output cell and, when formulas
@@ -335,6 +365,9 @@ func (r *run) failCell(c *active, w *worker, res *rowResult, err error, rejected
 // finish formats a computed row, or leaves it to apply when it numbers
 // rows.
 func (r *run) finish(res *rowResult, b *batch, w *worker) {
+	if r.plan.dups != nil {
+		res.key = r.dupKey(w.out)
+	}
 	if r.numbered {
 		res.cells = slices.Clone(w.out) // formatted by apply, once numbered
 		return

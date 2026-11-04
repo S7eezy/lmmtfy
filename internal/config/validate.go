@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -98,7 +99,72 @@ func Validate(m *Mapping) Issues {
 	checkEnum(&is, "logging.format", m.Logging.Format, LogFormats)
 
 	validateRules(&is, m)
+	validateRows(&is, m)
+	validateTests(&is, m)
 	return is
+}
+
+// validateRows checks keep_rows_when and duplicates. The condition itself
+// is compiled by the engine.
+func validateRows(is *Issues, m *Mapping) {
+	d := m.Duplicates
+	if d == nil {
+		return
+	}
+	checkEnum(is, "duplicates.keep", d.Keep, KeepDuplicates)
+	if len(d.Key) == 0 {
+		is.Errorf("duplicates.key", "list the target columns that identify a row")
+	}
+	seen := map[string]bool{}
+	for i, name := range d.Key {
+		path := fmt.Sprintf("duplicates.key[%d]", i)
+		switch {
+		case seen[name]:
+			is.Errorf(path, "%q is listed twice", name)
+		case !slices.ContainsFunc(m.Target.Inline.Columns, func(c TargetColumn) bool { return c.Name == name }):
+			is.Errorf(path, "%q is not a target column", name)
+		}
+		seen[name] = true
+	}
+}
+
+// validateTests checks the structure of saved tests.
+func validateTests(is *Issues, m *Mapping) {
+	names := map[string]bool{}
+	for i, t := range m.Tests {
+		path := fmt.Sprintf("tests[%d]", i)
+		name := strings.TrimSpace(t.Name)
+		switch {
+		case name == "":
+			is.Errorf(path+".name", "required")
+		case names[name]:
+			is.Errorf(path+".name", "another test has the name %q", name)
+		}
+		names[name] = true
+		if len(t.Input) == 0 {
+			is.Errorf(path+".input", "at least one input row is required")
+		}
+		for j, row := range t.Input {
+			for _, c := range row {
+				if *m.Input.Header {
+					if strings.TrimSpace(c.Column) == "" {
+						is.Errorf(fmt.Sprintf("%s.input[%d]", path, j), "a cell needs a column name")
+					}
+					continue
+				}
+				if n, err := strconv.Atoi(strings.TrimPrefix(c.Column, "#")); err != nil || n < 1 || !strings.HasPrefix(c.Column, "#") {
+					is.Errorf(fmt.Sprintf("%s.input[%d].%s", path, j, c.Column), "the input has no header: name cells by position, \"#1\" for the first column")
+				}
+			}
+		}
+		for j, row := range t.Output {
+			for _, c := range row {
+				if !slices.ContainsFunc(m.Target.Inline.Columns, func(tc TargetColumn) bool { return tc.Name == c.Column }) {
+					is.Errorf(fmt.Sprintf("%s.output[%d].%s", path, j, c.Column), "not a target column")
+				}
+			}
+		}
+	}
 }
 
 func validateTarget(is *Issues, t *Target) {
@@ -245,6 +311,18 @@ func validateRule(is *Issues, path string, c TargetColumn, r Rule, m *Mapping) {
 	}
 	if r.Source != nil && !*m.Input.Header {
 		is.Errorf(path+".source", "input has no header (input.header: false): use source_index")
+	}
+	if len(r.Aliases) > 0 && r.Source == nil {
+		is.Errorf(path+".aliases", "aliases are other names of the source header: they need source")
+	}
+	for i, a := range r.Aliases {
+		switch {
+		case strings.TrimSpace(string(a)) == "":
+			is.Errorf(fmt.Sprintf("%s.aliases[%d]", path, i), "empty")
+		case r.Source != nil && strings.TrimSpace(string(a)) == strings.TrimSpace(string(*r.Source)),
+			slices.Contains(r.Aliases[:i], a):
+			is.Warnf(fmt.Sprintf("%s.aliases[%d]", path, i), "%q is already listed", a)
+		}
 	}
 
 	checkEnum(is, path+".if_missing", r.IfMissing, IfMissingValues)

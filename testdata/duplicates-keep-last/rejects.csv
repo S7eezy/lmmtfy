@@ -1,0 +1,2 @@
+sku,updated,qty,_line,_column,_error
+A,2024-01-04,x,6,qty,"""x"" is not an integer"

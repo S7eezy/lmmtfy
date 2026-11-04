@@ -1,0 +1,35 @@
+{
+  "mapping": "aliases",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 2,
+  "rows_written": 2,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "missing_optional_columns": [
+    {
+      "source": "amount",
+      "target": "amount",
+      "action": "empty",
+      "did_you_mean": "Amounts"
+    }
+  ],
+  "aliases_used": [
+    {
+      "source": "id",
+      "found_as": "N° commande",
+      "target": "order_id"
+    },
+    {
+      "source": "date",
+      "found_as": "Date de commande",
+      "target": "order_date"
+    }
+  ],
+  "unused_source_columns": [
+    "Amounts",
+    "channel"
+  ],
+  "duration_seconds": 0
+}

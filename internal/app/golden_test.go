@@ -48,6 +48,16 @@ func TestGolden(t *testing.T) {
 			c.CompareAbsent(t, "report.json")
 		}
 
+		// Saved tests, when the mapping has some: `lmmtfy test` output.
+		if plan != nil && len(plan.Mapping.Tests) > 0 {
+			var stdout bytes.Buffer
+			code := Test("lmmtfy", c.Path("mapping.yaml"), &stdout, &stdout)
+			fmt.Fprintf(&stdout, "exit code %d\n", code)
+			c.Compare(t, "test.txt", stdout.Bytes())
+		} else {
+			c.CompareAbsent(t, "test.txt")
+		}
+
 		leftovers, _ := filepath.Glob(filepath.Join(tmp, ".*.tmp"))
 		if len(leftovers) > 0 {
 			t.Errorf("temporary files left behind: %v", leftovers)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/S7eezy/lmmtfy/internal/csvio"
 	"github.com/S7eezy/lmmtfy/internal/report"
@@ -13,8 +14,24 @@ type resolution struct {
 	active          []*active // output columns, in output order
 	order           []*active // every column, helpers included, in evaluation order
 	missing         []report.MissingColumn
-	missingRequired []string
+	missingRequired []report.MissingColumn
+	aliased         []report.AliasUse
 	unused          []string // source columns no rule reads: dropped
+	used            []int    // indexes of the source columns rules read
+}
+
+// requiredError explains the required source columns missing from an
+// input, with the column each one may have become.
+func (res resolution) requiredError() error {
+	parts := make([]string, len(res.missingRequired))
+	for i, m := range res.missingRequired {
+		parts[i] = fmt.Sprintf("%q (for %s", m.Source, m.Target)
+		if m.Suggestion != "" {
+			parts[i] += fmt.Sprintf("; did you mean %q?", m.Suggestion)
+		}
+		parts[i] += ")"
+	}
+	return &FileError{Reason: "required source columns missing from input: " + strings.Join(parts, ", ")}
 }
 
 // resolve matches the plan's columns against one input's header (nil
@@ -43,6 +60,14 @@ func (p *Plan) resolve(header []string, width int) resolution {
 		idx, found := c.index, c.index >= 0 && c.index < width
 		if c.index < 0 {
 			idx, found = index[c.source]
+			for _, alias := range c.aliases {
+				if found {
+					break
+				}
+				if idx, found = index[alias]; found {
+					res.aliased = append(res.aliased, report.AliasUse{Source: c.source, Alias: alias, Target: c.name})
+				}
+			}
 		}
 		if found {
 			a.idx = idx
@@ -68,7 +93,8 @@ func (p *Plan) resolve(header []string, width int) resolution {
 			res.missing = append(res.missing, missing)
 			continue
 		default:
-			res.missingRequired = append(res.missingRequired, fmt.Sprintf("%q (for %s)", c.sourceLabel(), c.name))
+			missing.Action = "error"
+			res.missingRequired = append(res.missingRequired, missing)
 			continue
 		}
 		res.missing = append(res.missing, missing)
@@ -93,6 +119,9 @@ func (p *Plan) resolve(header []string, width int) resolution {
 	}
 
 	for i, u := range used {
+		if u {
+			res.used = append(res.used, i)
+		}
 		if !u {
 			if header != nil {
 				res.unused = append(res.unused, header[i])
@@ -101,22 +130,31 @@ func (p *Plan) resolve(header []string, width int) resolution {
 			}
 		}
 	}
+	if header != nil {
+		for _, list := range [][]report.MissingColumn{res.missing, res.missingRequired} {
+			for i := range list {
+				list[i].Suggestion = suggest(list[i].Source, res.unused)
+			}
+		}
+	}
 	return res
 }
 
 // ColumnCheck is how one target column will be filled from a given input.
 type ColumnCheck struct {
-	Target string
-	Source string // "" when the column has no source
-	Status string // "found", "missing", "constant", "computed" (formula, cases or sequence)
-	Action string // for missing columns: empty, default, omitted, error
+	Target     string `json:"target"`
+	Source     string `json:"source,omitempty"`     // "" when the column has no source
+	Status     string `json:"status"`               // "found", "missing", "constant", "computed" (formula, cases or sequence)
+	Action     string `json:"action,omitempty"`     // for missing columns: empty, default, omitted, error
+	Alias      string `json:"alias,omitempty"`      // the alias it was found as, if not its source name
+	Suggestion string `json:"suggestion,omitempty"` // for missing columns: the unused input column most like it
 }
 
 // InputCheck is the result of checking an input header against the plan.
 type InputCheck struct {
-	Columns []ColumnCheck
-	Unused  []string // source columns that are dropped
-	OK      bool     // false when a required source column is missing
+	Columns []ColumnCheck `json:"columns"`
+	Unused  []string      `json:"unused,omitempty"` // source columns that are dropped
+	OK      bool          `json:"ok"`               // false when a required source column is missing
 }
 
 // CheckInput reads only the header (or first row) of an input and reports
@@ -145,8 +183,12 @@ func (p *Plan) CheckInput(src io.Reader) (*InputCheck, error) {
 	res := p.resolve(header, len(rec.Fields))
 	check := &InputCheck{Unused: res.unused, OK: len(res.missingRequired) == 0}
 	missing := map[string]report.MissingColumn{}
-	for _, m := range res.missing {
+	for _, m := range append(res.missing, res.missingRequired...) {
 		missing[m.Target] = m
+	}
+	aliases := map[string]string{}
+	for _, a := range res.aliased {
+		aliases[a.Target] = a.Alias
 	}
 	for _, c := range p.cols {
 		cc := ColumnCheck{Target: c.name}
@@ -159,22 +201,11 @@ func (p *Plan) CheckInput(src io.Reader) (*InputCheck, error) {
 		case !c.hasSource:
 			cc.Status = "constant"
 		case isMissing:
-			cc.Status, cc.Action = "missing", m.Action
-		case activeContains(res.active, c):
-			cc.Status = "found"
+			cc.Status, cc.Action, cc.Suggestion = "missing", m.Action, m.Suggestion
 		default:
-			cc.Status, cc.Action = "missing", "error"
+			cc.Status, cc.Alias = "found", aliases[c.name]
 		}
 		check.Columns = append(check.Columns, cc)
 	}
 	return check, nil
-}
-
-func activeContains(list []*active, c *column) bool {
-	for _, a := range list {
-		if a.column == c {
-			return true
-		}
-	}
-	return false
 }

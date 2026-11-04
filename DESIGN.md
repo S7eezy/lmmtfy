@@ -383,6 +383,7 @@ Detection only proposes; the user decides.
 ```
 lmmtfy convert <input.csv> --mapping <m.yaml> -o <out.csv> [--rejects path] [--report r.json] [--log-level L] [--strict] [--workers N]
 lmmtfy validate --mapping <m.yaml> [--input <input.csv>]     # check config; optionally check an input header against it
+lmmtfy test --mapping <m.yaml>                                # replay the mapping's saved tests (§12.5)
 lmmtfy inspect <input.csv> [--sample N] [--json]             # detected dialect, columns, types
 lmmtfy init <input.csv> -o <m.yaml> [--name N] [--force]     # draft mapping from detection (standalone)
 lmmtfy build --mapping <m.yaml> --os windows|linux|darwin [--arch amd64|arm64] -o <converter>
@@ -753,15 +754,109 @@ All done.
 | M8 | Aggregates, first pass, `default_formula`; Studio default modes | A GB file with an aggregate converts in constant memory |
 | M9 | Combining rows (sorted and in memory), slots, batch aggregates; Studio combine flow and grouped preview | The batch example of §11.6 is a golden case |
 
-## 12. Ideas for later
+## 12. Real files (v1.4)
+
+Status: implemented.
+
+Files sent by people drift: a column gets renamed, a test row slips in, an export is appended to itself, a new version of a mapping silently changes a value. v1.4 makes these visible and fixable in the mapping, without code.
+
+### 12.1 Column aliases
+
+A rule (or helper) lists other header names its source may have:
+
+```yaml
+columns:
+  order_date:
+    source: "Order date"
+    aliases: ["Date de commande", "order_date"]
+```
+
+The source name is tried first, then each alias in order; the first header present wins. Aliases are exact names, like `source`, and need `source` (not `source_index`). A column found through an alias is reported in the summary (`aliases_used`) and logged at info level, so a renamed column is visible without failing.
+
+### 12.2 Drift report
+
+When a required source column is missing, the error names the unused header that looks most like it:
+
+```
+required source columns missing from input: "Order date" (for order_date; did you mean "Order Date "?)
+```
+
+A header looks like a source when they are equal ignoring case, accents, spaces and punctuation, or else within a small edit distance (a quarter of the length, at least 1). Only headers that no rule reads are suggested.
+
+- The summary lists source columns that no rule reads (`unused_source_columns`): a new column in the export.
+- `lmmtfy validate --input` shows columns found through aliases and the suggestions.
+- Studio checks a file against the mapping before converting it: missing columns with their suggestion and a one-click "use this column" that adds an alias, new columns, and aliases used.
+
+### 12.3 Keeping rows
+
+A mapping-level condition keeps rows; the others are dropped, without errors:
+
+```yaml
+keep_rows_when: '[status] <> "TEST"'
+```
+
+- Same language as `cases`: it reads target columns and helpers, as written. A false or empty result drops the row (an empty value makes comparisons false, so `is_empty([status]) or [status] <> "TEST"` keeps rows without status).
+- It is evaluated as early as possible: the columns it reads first, then the condition, then the other columns. A dropped row reports no errors from columns not computed yet, and its warnings and errors from the columns already computed are dropped too.
+- If a column the condition reads has an error, the condition cannot be decided: the row is kept and the error handled as usual. If the condition itself fails (division by zero), the row has an error.
+- It cannot read row numbers (`sequence`) or anything computed from an aggregate: aggregates cover kept rows only, so the first pass applies the condition too.
+- Combined rows (§11.6): the condition reads helpers, for each input row. Dropped rows take no slot and no part in the batch's aggregates; a batch with no row left gives no output row.
+- The summary counts dropped input rows (`rows_filtered`).
+
+### 12.4 Duplicate rows
+
+```yaml
+duplicates:
+  key: [order_id]        # target columns, as written
+  keep: first            # or last
+```
+
+- Two output rows are duplicates when they have the same values in the key columns, as written (after formatting, so `1.5` and `1.50` in a scale-2 column are equal; an empty value is a value).
+- `keep: first` keeps the first row of each key that converts; `keep: last`, the last. A rejected row does not count: the next row with its key can be kept.
+- The ordered apply stage decides, so the result does not depend on workers. `first` keeps a set of keys seen; `last` converts the file twice: the first time without writing, to find the last row of each key (input read twice, as for aggregates).
+- Memory grows with the number of distinct keys (about 50 bytes plus the key per row).
+- Key columns cannot be row numbers. With combined rows, the key is on output rows (batches).
+- The summary counts dropped output rows (`rows_duplicate`).
+
+### 12.5 Saved tests
+
+A mapping can carry examples of what it must do, replayed by `lmmtfy test` and by Studio on every change:
+
+```yaml
+tests:
+  - name: comma decimals
+    input:
+      - { id: "7", amount: "1 234,50", status: "OK" }
+    output:
+      - { order_id: "7", amount: "1234.50" }
+  - name: test rows are dropped
+    input:
+      - { id: "8", amount: "1", status: "TEST" }
+    output: []
+  - name: bad amount is rejected
+    input:
+      - { id: "9", amount: "abc", status: "OK" }
+    output: []
+    errors: ["amount"]
+```
+
+- `input` rows are raw text by source header (`"#1"`, `"#2"`… without header); a header absent from a row is an empty cell. The rows are converted as a file: header, then rows, read with the mapping's rules but plain CSV (no skipped lines, no footer).
+- `output` rows are compared on the columns they list, as written; the number of rows must match. `output: []` expects no row.
+- `errors`: each text must appear in an error (`<column>: <message>`), and every error must be expected: without `errors`, a test expects none. Warnings do not count.
+- Tests do not change the mapping's hash: a report identifies what converts, not how it is tested.
+- `lmmtfy test --mapping m.yaml` prints each test, the differences of the failed ones, and exits 0 when all pass, 3 otherwise. Converters do not run tests.
+- Studio: a pin button on a preview row saves it as a test (its source cells and the current output); the Tests panel shows pass or fail after each change, with the differences.
+
+### 12.6 Compatibility
+
+New keys only (`aliases`, `keep_rows_when`, `duplicates`, `tests`): mappings stay `version: 1`. The summary gains `rows_filtered`, `rows_duplicate`, `aliases_used` and `unused_source_columns`, all omitted when empty.
+
+## 13. Ideas for later
 
 - Header matching that ignores case and spacing, as an option.
 - Combined rows: expanding an output row in the preview shows the input lines it came from.
 - Condition builder: `and` / `or` within a case, without switching to formula text.
 - Split rows: the reverse of combining rows. One wide row (a timestamp and 20 sensor columns) becomes several rows (one per sensor reading), reusing the `{n}` patterns.
-- Row filter: `keep_rows_when: "[status] <> \"TEST\""` drops rows that are not errors.
 - Explain a cell: click an output cell to see each step from the raw value to the written value.
-- Saved test cases: pin a sample row with its expected output; `validate` replays them, so editing a mapping cannot silently change results.
 - Lookup tables built into the mapping (product code → name), keeping converters offline. The smallest step towards joins.
 - `epoch_s` and `epoch_ms` as date formats, simpler than a formula.
 - Sequences: prefix and padding (`ORD-000001`), and continuing across runs so daily files sent to the same software never reuse numbers.

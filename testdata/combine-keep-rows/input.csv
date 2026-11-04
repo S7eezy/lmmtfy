@@ -1,0 +1,6 @@
+batch,object,price,cancelled
+B1,bolt,1.5,no
+B1,nut,2,yes
+B1,washer,3,
+B2,gear,9,yes
+B3,pin,0.5,no

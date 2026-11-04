@@ -1,0 +1,16 @@
+# Cancelled rows take no slot and no part in the totals; B2 has only
+# cancelled rows, so it gives no output row.
+version: 1
+name: combine-keep-rows
+target: target.yaml
+logging: { level: warnings }
+group: { by: [batch] }
+keep_rows_when: 'not [cancelled]'
+helpers:
+  cancelled: { source: cancelled, type: boolean, true_values: ["yes"], false_values: ["no", ""] }
+  price: { source: price, type: decimal }
+columns:
+  batch:        { source: batch }
+  "object_{n}": { source: object }
+  lines:        { formula: "count()" }
+  total:        { formula: "total([price])" }

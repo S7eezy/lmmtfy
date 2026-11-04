@@ -554,7 +554,7 @@
     </div>
   </Modal>
 {:else if dialog === 'convert'}
-  <ConvertDialog {mapping} input={csvPath} onclose={() => (dialog = null)} />
+  <ConvertDialog bind:mapping input={csvPath} onclose={() => (dialog = null)} />
 {:else if dialog === 'export'}
   <ExportDialog {mapping} onclose={() => (dialog = null)} />
 {/if}

@@ -1,0 +1,7 @@
+ok    test rows are dropped
+ok    the first of two orders is kept
+ok    a bad amount is rejected
+FAIL  amounts keep their decimals
+      row 1, amount: expected "1.555", got "1.56"
+3 passed, 1 failed
+exit code 3

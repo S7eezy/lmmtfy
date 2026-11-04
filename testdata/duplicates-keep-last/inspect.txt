@@ -1,0 +1,16 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       6 rows (whole file)
+
+  #  column   target   type    ok    details             examples
+  1  sku      sku      string  100%  max 1 char          "A", "B", "C"
+  2  updated  updated  date    100%  formats YYYY-MM-DD  "2024-01-01", "2024-01-03", "2024-01-02"
+  3  qty      qty      string  100%  max 1 char          "1", "5", "2"
+
+notes:
+  - qty: 83% of values read as integer; rejected: x

@@ -1,0 +1,8 @@
+id,status,amount
+1,OK,10
+2,TEST,abc
+1,OK,11
+3,OK,abc
+3,OK,12
+4,,5
+5,OK,1.5

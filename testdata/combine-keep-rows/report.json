@@ -1,0 +1,13 @@
+{
+  "mapping": "combine-keep-rows",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 5,
+  "batches": 3,
+  "rows_written": 2,
+  "rows_rejected": 0,
+  "rows_with_errors": 0,
+  "rows_filtered": 2,
+  "duration_seconds": 0
+}

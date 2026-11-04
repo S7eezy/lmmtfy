@@ -14,6 +14,10 @@ export function CheckFormula(arg1, arg2, arg3) {
   return window['go']['main']['App']['CheckFormula'](arg1, arg2, arg3);
 }
 
+export function CheckInput(arg1, arg2) {
+  return window['go']['main']['App']['CheckInput'](arg1, arg2);
+}
+
 export function CheckTarget(arg1) {
   return window['go']['main']['App']['CheckTarget'](arg1);
 }
@@ -58,6 +62,10 @@ export function LoadTarget(arg1) {
   return window['go']['main']['App']['LoadTarget'](arg1);
 }
 
+export function MakeTest(arg1, arg2, arg3) {
+  return window['go']['main']['App']['MakeTest'](arg1, arg2, arg3);
+}
+
 export function Open(arg1) {
   return window['go']['main']['App']['Open'](arg1);
 }
@@ -80,6 +88,10 @@ export function Recent() {
 
 export function Remember(arg1, arg2) {
   return window['go']['main']['App']['Remember'](arg1, arg2);
+}
+
+export function RunTests(arg1) {
+  return window['go']['main']['App']['RunTests'](arg1);
 }
 
 export function SaveMapping(arg1, arg2, arg3, arg4) {

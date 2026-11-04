@@ -1,0 +1,14 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       5 rows (whole file)
+
+  #  column     target     type     ok    details               examples
+  1  batch      batch      string   100%  max 2 chars           "B1", "B2", "B3"
+  2  object     object     string   100%  max 6 chars           "bolt", "nut", "washer"
+  3  price      price      decimal  100%  decimal ".", scale 1  "1.5", "2", "3"
+  4  cancelled  cancelled  boolean  100%  1 empty               "no", "yes"

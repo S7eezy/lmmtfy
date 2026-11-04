@@ -1,0 +1,1 @@
+summary: ok, 5 rows read in 3 batches, 2 written, 2 filtered, 0 rejected, 0 with errors, <duration>

@@ -16,6 +16,34 @@ export namespace config {
 	        this.then_formula = source["then_formula"];
 	    }
 	}
+	export class Cell {
+	    column: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Cell(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.value = source["value"];
+	    }
+	}
+	export class Duplicates {
+	    key: string[];
+	    keep?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Duplicates(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.keep = source["keep"];
+	    }
+	}
 	export class Group {
 	    by: string[];
 	    order_by?: string[];
@@ -65,6 +93,7 @@ export namespace config {
 	export class Helper {
 	    type: string;
 	    source?: string;
+	    aliases?: string[];
 	    source_index?: number;
 	    optional?: boolean;
 	    if_missing?: string;
@@ -95,6 +124,7 @@ export namespace config {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
 	        this.source = source["source"];
+	        this.aliases = source["aliases"];
 	        this.source_index = source["source_index"];
 	        this.optional = source["optional"];
 	        this.if_missing = source["if_missing"];
@@ -192,8 +222,45 @@ export namespace config {
 	        this.summary = source["summary"];
 	    }
 	}
+	export class Test {
+	    name: string;
+	    input: Cell[][];
+	    output: Cell[][];
+	    errors?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Test(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.input = this.convertValues(source["input"], Cell);
+	        this.output = this.convertValues(source["output"], Cell);
+	        this.errors = source["errors"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Rule {
 	    source?: string;
+	    aliases?: string[];
 	    source_index?: number;
 	    optional?: boolean;
 	    if_missing?: string;
@@ -223,6 +290,7 @@ export namespace config {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.source = source["source"];
+	        this.aliases = source["aliases"];
 	        this.source_index = source["source_index"];
 	        this.optional = source["optional"];
 	        this.if_missing = source["if_missing"];
@@ -437,8 +505,11 @@ export namespace config {
 	    on_error: OnError;
 	    logging: Logging;
 	    group?: Group;
+	    keep_rows_when?: string;
+	    duplicates?: Duplicates;
 	    helpers?: Record<string, Helper>;
 	    columns: Record<string, Rule>;
+	    tests?: Test[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Mapping(source);
@@ -454,8 +525,11 @@ export namespace config {
 	        this.on_error = this.convertValues(source["on_error"], OnError);
 	        this.logging = this.convertValues(source["logging"], Logging);
 	        this.group = this.convertValues(source["group"], Group);
+	        this.keep_rows_when = source["keep_rows_when"];
+	        this.duplicates = this.convertValues(source["duplicates"], Duplicates);
 	        this.helpers = this.convertValues(source["helpers"], Helper, true);
 	        this.columns = this.convertValues(source["columns"], Rule, true);
+	        this.tests = this.convertValues(source["tests"], Test);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -476,6 +550,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 	
 	
 	
@@ -609,6 +684,100 @@ export namespace detect {
 
 export namespace engine {
 	
+	export class ColumnCheck {
+	    target: string;
+	    source?: string;
+	    status: string;
+	    action?: string;
+	    alias?: string;
+	    suggestion?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ColumnCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.target = source["target"];
+	        this.source = source["source"];
+	        this.status = source["status"];
+	        this.action = source["action"];
+	        this.alias = source["alias"];
+	        this.suggestion = source["suggestion"];
+	    }
+	}
+	export class InputCheck {
+	    columns: ColumnCheck[];
+	    unused?: string[];
+	    ok: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new InputCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], ColumnCheck);
+	        this.unused = source["unused"];
+	        this.ok = source["ok"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TestResult {
+	    name: string;
+	    passed: boolean;
+	    problems?: string[];
+	    output: config.Cell[][];
+	    errors?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TestResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.passed = source["passed"];
+	        this.problems = source["problems"];
+	        this.output = this.convertValues(source["output"], config.Cell);
+	        this.errors = source["errors"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TraceInput {
 	    column: string;
 	    value: string;
@@ -691,6 +860,22 @@ export namespace expr {
 
 export namespace report {
 	
+	export class AliasUse {
+	    source: string;
+	    found_as: string;
+	    target: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AliasUse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.found_as = source["found_as"];
+	        this.target = source["target"];
+	    }
+	}
 	export class ColumnStats {
 	    name: string;
 	    errors: number;
@@ -713,6 +898,7 @@ export namespace report {
 	    source: string;
 	    target: string;
 	    action: string;
+	    did_you_mean?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MissingColumn(source);
@@ -723,6 +909,7 @@ export namespace report {
 	        this.source = source["source"];
 	        this.target = source["target"];
 	        this.action = source["action"];
+	        this.did_you_mean = source["did_you_mean"];
 	    }
 	}
 	export class Summary {
@@ -736,8 +923,12 @@ export namespace report {
 	    rows_written: number;
 	    rows_rejected: number;
 	    rows_with_errors: number;
+	    rows_filtered?: number;
+	    rows_duplicate?: number;
 	    columns?: ColumnStats[];
 	    missing_optional_columns?: MissingColumn[];
+	    aliases_used?: AliasUse[];
+	    unused_source_columns?: string[];
 	    duration_seconds: number;
 	
 	    static createFrom(source: any = {}) {
@@ -756,8 +947,12 @@ export namespace report {
 	        this.rows_written = source["rows_written"];
 	        this.rows_rejected = source["rows_rejected"];
 	        this.rows_with_errors = source["rows_with_errors"];
+	        this.rows_filtered = source["rows_filtered"];
+	        this.rows_duplicate = source["rows_duplicate"];
 	        this.columns = this.convertValues(source["columns"], ColumnStats);
 	        this.missing_optional_columns = this.convertValues(source["missing_optional_columns"], MissingColumn);
+	        this.aliases_used = this.convertValues(source["aliases_used"], AliasUse);
+	        this.unused_source_columns = source["unused_source_columns"];
 	        this.duration_seconds = source["duration_seconds"];
 	    }
 	
@@ -1050,6 +1245,8 @@ export namespace studio {
 	    failure?: string;
 	    rejects?: string;
 	    trace?: engine.TraceRow[];
+	    sources?: config.Cell[][][];
+	    rejected_sources?: config.Cell[][][];
 	
 	    static createFrom(source: any = {}) {
 	        return new Result(source);
@@ -1066,6 +1263,8 @@ export namespace studio {
 	        this.failure = source["failure"];
 	        this.rejects = source["rejects"];
 	        this.trace = this.convertValues(source["trace"], engine.TraceRow);
+	        this.sources = this.convertValues(source["sources"], config.Cell);
+	        this.rejected_sources = this.convertValues(source["rejected_sources"], config.Cell);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

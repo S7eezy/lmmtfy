@@ -82,6 +82,9 @@ func TestValidateCommand(t *testing.T) {
 		{"optional missing", []string{"validate", "--mapping", "../../testdata/optional-missing/mapping.yaml", "--input", "../../testdata/optional-missing/input.csv"}, exitcode.OK, "missing, omitted from output"},
 		{"required missing", []string{"validate", "--mapping", "../../testdata/missing-required-column/mapping.yaml", "--input", "../../testdata/missing-required-column/input.csv"}, exitcode.FileFailed, "MISSING (required)"},
 		{"invalid", []string{"validate", "--mapping", "../../testdata/invalid-config/mapping.yaml"}, exitcode.Usage, "invalid, 6 errors"},
+		{"alias and suggestion", []string{"validate", "--mapping", "../../testdata/aliases-and-drift/mapping.yaml", "--input", "../../testdata/aliases-and-drift/input.csv"}, exitcode.OK, `did you mean "Amounts"?`},
+		{"tests", []string{"test", "../../testdata/keep-rows-and-duplicates/mapping.yaml"}, exitcode.FileFailed, "3 passed, 1 failed"},
+		{"no tests", []string{"test", "--mapping", "../../testdata/acme-orders/mapping.yaml"}, exitcode.OK, "has no tests"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

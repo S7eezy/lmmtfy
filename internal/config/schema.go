@@ -66,16 +66,59 @@ type TargetColumn struct {
 
 // Mapping describes how one source format becomes a target.
 type Mapping struct {
-	Version     int               `yaml:"version" json:"version"`
-	Name        string            `yaml:"name" json:"name"`
-	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
-	Target      TargetRef         `yaml:"target" json:"target"`
-	Input       Input             `yaml:"input" json:"input"`
-	OnError     OnError           `yaml:"on_error" json:"on_error"`
-	Logging     Logging           `yaml:"logging" json:"logging"`
-	Group       *Group            `yaml:"group,omitempty" json:"group,omitempty"`
-	Helpers     map[string]Helper `yaml:"helpers,omitempty" json:"helpers,omitempty"`
-	Columns     map[string]Rule   `yaml:"columns" json:"columns"`
+	Version     int       `yaml:"version" json:"version"`
+	Name        string    `yaml:"name" json:"name"`
+	Description string    `yaml:"description,omitempty" json:"description,omitempty"`
+	Target      TargetRef `yaml:"target" json:"target"`
+	Input       Input     `yaml:"input" json:"input"`
+	OnError     OnError   `yaml:"on_error" json:"on_error"`
+	Logging     Logging   `yaml:"logging" json:"logging"`
+	Group       *Group    `yaml:"group,omitempty" json:"group,omitempty"`
+	// KeepRowsWhen is a condition: rows where it is false or empty are
+	// dropped, without errors.
+	KeepRowsWhen string            `yaml:"keep_rows_when,omitempty" json:"keep_rows_when,omitempty"`
+	Duplicates   *Duplicates       `yaml:"duplicates,omitempty" json:"duplicates,omitempty"`
+	Helpers      map[string]Helper `yaml:"helpers,omitempty" json:"helpers,omitempty"`
+	Columns      map[string]Rule   `yaml:"columns" json:"columns"`
+	// Tests are examples of what the mapping must do, replayed by
+	// lmmtfy test and Studio. They are not part of the mapping's hash.
+	Tests []Test `yaml:"tests,omitempty" json:"tests,omitempty"`
+}
+
+// Duplicates drops output rows with the same values in the Key columns,
+// keeping the first or the last of each key.
+type Duplicates struct {
+	Key  []string `yaml:"key" json:"key"`
+	Keep string   `yaml:"keep,omitempty" json:"keep,omitempty"`
+}
+
+// Test is an example: input rows, by source header, and the output rows
+// they must give, compared on the columns they list. Errors lists texts
+// that must each appear in an error; without it, no error is expected.
+type Test struct {
+	Name   string   `yaml:"name" json:"name"`
+	Input  []Row    `yaml:"input" json:"input"`
+	Output []Row    `yaml:"output" json:"output"`
+	Errors []string `yaml:"errors,omitempty" json:"errors,omitempty"`
+}
+
+// Row is an ordered `column: value` list of cells, kept as written.
+type Row []Cell
+
+// Cell is one value of a Row.
+type Cell struct {
+	Column string `json:"column"`
+	Value  string `json:"value"`
+}
+
+// Get returns the value of a column, and whether the row has it.
+func (r Row) Get(column string) (string, bool) {
+	for _, c := range r {
+		if c.Column == column {
+			return c.Value, true
+		}
+	}
+	return "", false
 }
 
 // TargetRef is either a path to a target file or an inline target.
@@ -153,12 +196,15 @@ type Logging struct {
 // Rule says how one target column is filled. Parse options describe the
 // source representation.
 type Rule struct {
-	Source      *Scalar `yaml:"source,omitempty" json:"source,omitempty"`
-	SourceIndex int     `yaml:"source_index,omitempty" json:"source_index,omitempty"`
-	Optional    bool    `yaml:"optional,omitempty" json:"optional,omitempty"`
-	IfMissing   string  `yaml:"if_missing,omitempty" json:"if_missing,omitempty"`
-	IfEmpty     string  `yaml:"if_empty,omitempty" json:"if_empty,omitempty"`
-	Default     *Scalar `yaml:"default,omitempty" json:"default,omitempty"`
+	Source *Scalar `yaml:"source,omitempty" json:"source,omitempty"`
+	// Aliases are other header names of the source, tried in order when
+	// the source is not in the input.
+	Aliases     []Scalar `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	SourceIndex int      `yaml:"source_index,omitempty" json:"source_index,omitempty"`
+	Optional    bool     `yaml:"optional,omitempty" json:"optional,omitempty"`
+	IfMissing   string   `yaml:"if_missing,omitempty" json:"if_missing,omitempty"`
+	IfEmpty     string   `yaml:"if_empty,omitempty" json:"if_empty,omitempty"`
+	Default     *Scalar  `yaml:"default,omitempty" json:"default,omitempty"`
 	// DefaultFormula computes the default once per file, from aggregates
 	// such as lowest([date]); it replaces Default.
 	DefaultFormula string    `yaml:"default_formula,omitempty" json:"default_formula,omitempty"`
@@ -232,5 +278,6 @@ var (
 	LogFormats       = []string{"text", "json"}
 	Cases            = []string{"none", "upper", "lower"}
 	Overflows        = []string{"error", "truncate"}
+	KeepDuplicates   = []string{"first", "last"}
 	Roundings        = []string{"half_up", "half_even", "truncate"}
 )

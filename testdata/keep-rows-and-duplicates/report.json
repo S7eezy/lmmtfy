@@ -1,0 +1,21 @@
+{
+  "mapping": "keep-rows",
+  "mapping_sha256": "<sha256>",
+  "engine_version": "dev",
+  "status": "ok",
+  "rows_read": 7,
+  "rows_written": 3,
+  "rows_rejected": 1,
+  "rows_with_errors": 1,
+  "rows_filtered": 2,
+  "rows_duplicate": 1,
+  "columns": [
+    {
+      "name": "amount",
+      "errors": 1,
+      "defaulted": 0,
+      "warnings": 0
+    }
+  ],
+  "duration_seconds": 0
+}

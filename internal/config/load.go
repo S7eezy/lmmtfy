@@ -94,7 +94,9 @@ func Marshal(m *Mapping) ([]byte, error) {
 // Hash is the SHA-256 of the serialized resolved mapping. It identifies
 // exactly which configuration produced a file.
 func Hash(m *Mapping) (string, error) {
-	data, err := Marshal(m)
+	untested := *m
+	untested.Tests = nil // tests do not change what the mapping does
+	data, err := Marshal(&untested)
 	if err != nil {
 		return "", err
 	}
@@ -143,6 +145,10 @@ func (m *Mapping) ApplyDefaults() {
 			g.Sorted = ptr(true)
 		}
 		setDefault(&g.Overflow, GroupOverflows[0])
+	}
+
+	if d := m.Duplicates; d != nil {
+		setDefault(&d.Keep, KeepDuplicates[0])
 	}
 
 	setDefault(&m.Logging.Level, LogLevels[0])

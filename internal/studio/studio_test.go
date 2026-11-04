@@ -241,3 +241,60 @@ func TestSaveUnfinishedMapping(t *testing.T) {
 		t.Error("errors gone after loading")
 	}
 }
+
+// A previewed row can become a test: the preview gives the input rows of
+// each output and rejected row, and a test made from them passes.
+func TestPinRowsAsTests(t *testing.T) {
+	const dir = "../../testdata/keep-rows-and-duplicates/"
+	l, err := LoadMapping(dir + "mapping.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := fromEditor(t, l.Mapping)
+	res, err := PreviewOutput(dir+"input.csv", m, PreviewOptions{})
+	if err != nil || res.Failure != "" {
+		t.Fatal(err, res.Failure)
+	}
+	if len(res.Sources) != len(res.Rows) || len(res.RejectedSources) != len(res.Rejected)-1 {
+		t.Fatalf("sources %d for %d rows, %d for %d rejected", len(res.Sources), len(res.Rows), len(res.RejectedSources), len(res.Rejected)-1)
+	}
+	if got := fmt.Sprint(res.Sources[1]); got != "[[{id 3} {status OK} {amount 12}]]" {
+		t.Errorf("sources of row 2: %s", got)
+	}
+
+	for i, input := range [][]config.Row{res.Sources[1], res.RejectedSources[0]} {
+		test, err := MakeTest(m, fmt.Sprint("pinned ", i), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.Tests = append(m.Tests, *test)
+	}
+	if e := m.Tests[len(m.Tests)-1].Errors; len(e) != 1 || !strings.HasPrefix(e[0], "amount: ") {
+		t.Errorf("a rejected row's test expects its error: %q", e)
+	}
+	results := RunTests(m)
+	passed := 0
+	for _, r := range results {
+		if r.Passed {
+			passed++
+		}
+	}
+	// The mapping's own tests: 3 of 4 pass. The pinned ones pass.
+	if len(results) != 6 || passed != 5 {
+		t.Errorf("results: %+v", results)
+	}
+}
+
+func TestCheckInputSuggests(t *testing.T) {
+	l, err := LoadMapping("../../testdata/missing-column-suggestion/mapping.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := CheckInput("../../testdata/missing-column-suggestion/input.csv", fromEditor(t, l.Mapping))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.OK || c.Columns[1].Suggestion != "ORDER_DATE" {
+		t.Errorf("check: %+v", c)
+	}
+}

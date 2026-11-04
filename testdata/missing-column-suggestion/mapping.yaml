@@ -1,0 +1,9 @@
+# A required source column is missing: the error suggests the unused
+# input column that looks like it.
+version: 1
+name: suggestion
+target: target.yaml
+columns:
+  order_id:   { source: "Order ID" }
+  order_date: { source: "Order date" }
+  amount:     { source: amount }

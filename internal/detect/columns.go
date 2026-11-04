@@ -184,10 +184,15 @@ func inferColumn(all []string, opts Options) Column {
 		c.Notes = append(c.Notes, best.note)
 	}
 	if c.Type == "date" || c.Type == "datetime" {
-		for dayFirst, mf := range monthFirst {
+		// Longest first: DD/MM/YYYY also starts with DD/MM/YY. One note.
+		for _, pair := range monthFirst {
+			dayFirst, mf := pair[0], pair[1]
 			f := c.Formats[0]
-			if len(c.Formats) == 1 && strings.HasPrefix(f, dayFirst) && matchesAll(values, c.Type, strings.Replace(f, dayFirst, mf, 1)) {
-				c.Notes = append(c.Notes, fmt.Sprintf("day/month order is ambiguous: read as %s, could be %s", dayFirst, mf))
+			if len(c.Formats) == 1 && strings.HasPrefix(f, dayFirst) {
+				if matchesAll(values, c.Type, strings.Replace(f, dayFirst, mf, 1)) {
+					c.Notes = append(c.Notes, fmt.Sprintf("day/month order is ambiguous: read as %s, could be %s", dayFirst, mf))
+				}
+				break
 			}
 		}
 	}
@@ -324,7 +329,7 @@ var (
 
 // Day-first formats come before month-first ones: when every day is 12 or
 // less, both match, and the note tells the user.
-var monthFirst = map[string]string{"DD/MM/YYYY": "MM/DD/YYYY", "D/M/YYYY": "M/D/YYYY", "DD/MM/YY": "MM/DD/YY"}
+var monthFirst = [][2]string{{"DD/MM/YYYY", "MM/DD/YYYY"}, {"D/M/YYYY", "M/D/YYYY"}, {"DD/MM/YY", "MM/DD/YY"}}
 
 func dateCandidates(values []string) []candidate {
 	if !slices.ContainsFunc(values, hasDigit) {

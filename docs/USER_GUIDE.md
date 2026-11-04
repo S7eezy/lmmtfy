@@ -84,10 +84,13 @@ The home screen has two sides: **mappings** and **targets**, each with its recen
    - Select a column to see what was detected and to set its options on the right: source, empty and missing values, how values are read, value map, default, error handling, and how the value is written (shown read-only for a target file).
    - **Fill with** chooses how the column gets its values: a **source** column (optionally changed by a formula on its value), a **fixed value**, a **formula**, **conditions** or a **row number**. The formula field completes column and function names (type `[` for columns), checks the formula as you type and points at the error, and shows how it computes the first sample rows; **Examples** inserts common formulas (unit conversion, rounding, Unix timestamps…). Picking a source column in a formula creates a **helper** (listed under the columns): the source read with a type, for formulas only. The condition builder covers comparisons and empty tests; anything else is written as a formula.
    - A **default** can be a fixed value, or the first, lowest/earliest, highest/latest, last or most frequent value of a column, or a formula over the whole file. The preview computes such values over its rows; tick **Aggregates: whole file** to use the whole sample file.
+   - **Rows** (top of the list) keeps only the rows where a condition is true, and drops duplicate rows by key. A banner above the columns says what applies, and how many rows the preview dropped.
    - **Combine rows** (top of the list) makes one output row from several input rows sharing a key. Studio suggests it when the target repeats numbered columns (`price_0` … `price_16`); the dialog shows the batches the key makes in the sample. Each numbered family then shows as one row, `price_{n} × 17`.
+   - **Also named** (under the source column) lists other header names of the source: a file with any of them converts. When a source column is missing from the sample but a column looks like it (`Order date` and `ORDER_DATE`), the Review tab asks **Also accept “ORDER_DATE”**, which adds it.
    - The **Review** tab lists what needs a decision: target columns with no source, source columns missing from the file, columns matched to a target by name (confirm them, one by one or all at once), types that do not match the data, rules for a column the target no longer has, unused source columns. Click an item to jump to its column.
    - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
-6. **Save** writes the mapping (YAML), and a new target file with it. **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
+   - The pin at the start of an output or rejected row saves it as a **test**: its input row, and the output (or errors) it gives now. The **Tests** tab runs every test after each change and shows the ones that fail, with what differs; **Expect the new result** accepts a change made on purpose. Tests are saved in the mapping and replayed by `lmmtfy test`.
+6. **Save** writes the mapping (YAML), and a new target file with it. **Convert…** converts a whole file: it first checks the file's header, listing missing source columns (with the column each one may have become, and a button to accept it as another name), columns found under another name, and columns not used. **Export converter…** builds converters for Windows, Linux and macOS.
 
 Unfinished work can be saved at any step, errors included, and finished later: Studio says how many errors are left, and opening the file shows them again. Nothing converts with a mapping that has errors (Convert, Export, the CLI and converters refuse it) until they are fixed. The same goes for targets.
 
@@ -191,6 +194,7 @@ Header names are trimmed before matching rules.
 | Option | Meaning | Default |
 |---|---|---|
 | `source` | header name of the source column | |
+| `aliases` | other header names of the source, tried in order when `source` is not in the file | |
 | `source_index` | position (1 = first) instead, for files without header | |
 | `default` | value used when needed; written in the **output** format (`"0,00"` if the target writes decimal commas). `""` means empty | |
 | `optional` | the source column may be missing from a file | **false** |
@@ -218,6 +222,18 @@ WARN  configuration has 2 optional columns missing from input: Etat, Pays
 ```
 
 `if_missing: omit` changes the set of output columns, which the receiving software may refuse: Studio and `validate` warn about it.
+
+**Renamed columns.** Exports change: `Order date` becomes `Date de commande` in the French version. `aliases` lists the other names a source may have:
+
+```yaml
+order_date: { source: "Order date", aliases: ["Date de commande", "order_date"] }
+```
+
+The summary lists the aliases used (`aliases_used`) and the input columns no rule reads (`unused_source_columns`), and `logging.level: info` logs them. When a required source column is missing, the error names the unused column that looks most like it, ignoring case, accents, spaces and punctuation, or with a typo or two:
+
+```
+required source columns missing from input: "Order date" (for order_date; did you mean "ORDER_DATE"?)
+```
 
 ### Computed columns
 
@@ -291,6 +307,54 @@ columns:
 - With `sorted: true`, batches stream in constant memory, and a batch that comes back later in the file fails the conversion with both line numbers. With `sorted: false`, batches are held in memory until the end of the file.
 - A bad value rejects the whole batch: every row of it goes to the reject file. The summary counts batches: `10 rows read in 4 batches, 3 written, 1 rejected`.
 
+### Keeping rows
+
+```yaml
+keep_rows_when: '[status] <> "TEST"'
+```
+
+Rows where the condition is false are dropped, without errors and without going to the reject file. The condition is a formula, like a case's `when`: it reads output columns and helpers, as written.
+
+- The columns it reads are computed first, then the condition, then the other columns: a dropped row reports no error from a column it never needed. If a column the condition reads has an error, the row is kept with that error.
+- An empty value makes comparisons false, so `[status] <> "TEST"` also drops rows without status. Write `is_empty([status]) or [status] <> "TEST"` to keep them.
+- It cannot use aggregates, nor columns computed from them, nor row numbers: aggregates cover the kept rows only.
+- When rows are combined, the condition reads helpers, for each input row: dropped rows take no slot and no part in totals; a batch with no row left gives no output row.
+- The summary counts dropped rows: `7 rows read, 3 written, 2 filtered, …` (`rows_filtered` in reports).
+
+### Duplicate rows
+
+```yaml
+duplicates:
+  key: [order_id]     # target columns
+  keep: first         # first | last
+```
+
+Output rows with the same values in the key columns (as written) are duplicates: only the first, or the last, of each key is written. A rejected row does not count, so the next row with its key can be written. `keep: last` suits exports that append updates; the input is read twice. Memory grows with the number of distinct keys. The summary counts dropped rows (`rows_duplicate`).
+
+### Tests
+
+A mapping can carry examples of what it must do. `lmmtfy test --mapping m.yaml` converts each one and compares; Studio runs them after every change.
+
+```yaml
+tests:
+  - name: comma decimals
+    input:                            # source rows, by header ("#1"… without header)
+      - { id: "7", amount: "1 234,50" }
+    output:                           # expected rows, compared on the columns listed
+      - { order_id: "7", amount: "1234.50" }
+  - name: test rows are dropped
+    input:
+      - { id: "8", status: TEST }
+    output: []                        # no row written
+  - name: bad amount is rejected
+    input:
+      - { id: "9", amount: "abc" }
+    output: []
+    errors: ["amount"]                # each text must appear in an error
+```
+
+Input rows are converted as a file of their own, with the mapping's rules: aggregates cover the test's rows, row numbers start at 1. A test fails when the number of output rows differs, a listed value differs, an expected error does not occur, or an error occurs that `errors` does not expect. Tests do not change the mapping's checksum.
+
 ### Errors
 
 ```yaml
@@ -351,6 +415,7 @@ lmmtfy convert <input.csv> --mapping <m.yaml> -o <output.csv> [options]
     --strict              exit with code 1 when any row had an error, even if handled
     --workers <n>         CPU cores used (default: all)
 lmmtfy validate --mapping <m.yaml> [--input <input.csv>]
+lmmtfy test --mapping <m.yaml>
 lmmtfy inspect <input.csv> [--sample <rows>] [--json]
 lmmtfy init <input.csv> -o <m.yaml> [--name <name>] [--sample <rows>] [--force]
 lmmtfy build --mapping <m.yaml> --os windows|linux|darwin [--arch amd64|arm64] -o <converter>
@@ -359,6 +424,8 @@ lmmtfy version
 
 Options may come before or after file names.
 
+`validate --input` checks a file's header without converting it: each output column and where it comes from, columns found under another name, missing ones with the column that looks like them, and input columns not used. `test` runs the mapping's tests (see [Tests](#tests)) and exits with 3 when one fails.
+
 **Exit codes** (converters use the same):
 
 | Code | Meaning |
@@ -366,7 +433,7 @@ Options may come before or after file names.
 | 0 | Success. Handled errors (rejected or defaulted rows) are allowed, unless `--strict`. |
 | 1 | Success with handled errors, only with `--strict`. |
 | 2 | Bad command line or invalid mapping. |
-| 3 | The file was refused: `fail_file`, error thresholds, required source column missing, malformed CSV. |
+| 3 | The file was refused: `fail_file`, error thresholds, required source column missing, malformed CSV. For `test`: a test failed. |
 | 4 | A file could not be read or written. |
 | 130 | Interrupted (Ctrl+C or stop signal). No output written. |
 
@@ -391,7 +458,8 @@ A converter cannot be pointed at another mapping: it converts with the one it wa
 
 - Copy the converter (and nothing else) to the machine. Check it with `SHA256SUMS` or `--info`.
 - Schedule it with the usual tools (Windows Task Scheduler, cron, systemd timers) and act on the exit code: `0` done, `3` file refused (look at the log and the reject file), `4` file access problem.
-- Keep `--report summary.json` for each run: rows read, written and rejected, errors per column, missing optional columns, mapping checksum.
+- Keep `--report summary.json` for each run: rows read, written, filtered, duplicate and rejected, errors per column, missing optional columns, aliases used and unused input columns (an export that changed), mapping checksum.
+- Keep tests in the mapping and run `lmmtfy test` before deploying a new converter.
 - Set `logging.file` in the mapping, or redirect standard error, to keep logs.
 - Large files are streamed: memory stays flat whatever the size (about 40 MB with all cores for a 1 GB file).
 
@@ -401,7 +469,8 @@ A converter cannot be pointed at another mapping: it converts with the one it wa
 |---|---|
 | Accented letters come out wrong (`Ã©`, `�`) | Wrong input encoding. Exports from Windows tools are usually `windows-1252`. |
 | Everything lands in one column | Wrong delimiter. `lmmtfy inspect` shows the detected one. |
-| `required source columns missing from input: "Date" (for order_date)` | The file has no such header, or it is spelled differently, or the header is not on `header_row`. `lmmtfy validate --mapping m.yaml --input file.csv` shows how each column is found. |
+| `required source columns missing from input: "Date" (for order_date)` | The file has no such header, or it is spelled differently, or the header is not on `header_row`. `lmmtfy validate --mapping m.yaml --input file.csv` shows how each column is found. A renamed column: add its new name to the rule's `aliases` (the error's "did you mean" names the likely one). |
+| Some rows are missing from the output, without errors | `keep_rows_when` dropped them (an empty value makes comparisons false), or `duplicates` did. The summary counts both: `2 filtered, 1 duplicate`. |
 | `duplicate header "Name"` | Set `input.duplicate_headers: suffix` and use `Name_2` for the second one. |
 | `row has 4 fields, expected 5` | Rows with missing or extra fields: fix the file, or set `input.ragged_rows`. |
 | `"31/02/2026" does not match date format DD/MM/YYYY` | The value is invalid (there is no 31 February) or another format is used: add it to `formats`. |

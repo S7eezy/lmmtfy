@@ -65,38 +65,44 @@ type ValueMap []Pair
 
 // UnmarshalYAML implements yaml.NodeUnmarshaler.
 func (m *ValueMap) UnmarshalYAML(node ast.Node) error {
+	pairs, err := orderedPairs(node, "map must be a mapping of `source value: output value`", "map key")
+	*m = pairs
+	return err
+}
+
+// orderedPairs reads a YAML mapping of scalars, in order. A null node is
+// nil.
+func orderedPairs(node ast.Node, notMapping, key string) ([]Pair, error) {
 	var entries []*ast.MappingValueNode
 	switch n := node.(type) {
 	case *ast.NullNode:
-		*m = nil
-		return nil
+		return nil, nil
 	case *ast.MappingNode:
 		entries = n.Values
 	case *ast.MappingValueNode:
 		entries = []*ast.MappingValueNode{n}
 	default:
-		return fmt.Errorf("line %d: map must be a mapping of `source value: output value`", line(node))
+		return nil, fmt.Errorf("line %d: %s", line(node), notMapping)
 	}
 
 	seen := make(map[string]bool, len(entries))
-	out := make(ValueMap, 0, len(entries))
+	out := make([]Pair, 0, len(entries))
 	for _, e := range entries {
 		from, err := scalarText(e.Key)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		to, err := scalarText(e.Value)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if seen[from] {
-			return fmt.Errorf("line %d: duplicate map key %q", line(e.Key), from)
+			return nil, fmt.Errorf("line %d: duplicate %s %q", line(e.Key), key, from)
 		}
 		seen[from] = true
 		out = append(out, Pair{From: from, To: to})
 	}
-	*m = out
-	return nil
+	return out, nil
 }
 
 // MarshalYAML implements yaml.InterfaceMarshaler, preserving entry order.
@@ -104,6 +110,28 @@ func (m ValueMap) MarshalYAML() (any, error) {
 	out := make(yaml.MapSlice, len(m))
 	for i, p := range m {
 		out[i] = yaml.MapItem{Key: p.From, Value: p.To}
+	}
+	return out, nil
+}
+
+// UnmarshalYAML implements yaml.NodeUnmarshaler.
+func (r *Row) UnmarshalYAML(node ast.Node) error {
+	pairs, err := orderedPairs(node, "a row must be a mapping of `column: value`", "column")
+	if err != nil {
+		return err
+	}
+	*r = make(Row, len(pairs))
+	for i, p := range pairs {
+		(*r)[i] = Cell{Column: p.From, Value: p.To}
+	}
+	return nil
+}
+
+// MarshalYAML implements yaml.InterfaceMarshaler, preserving column order.
+func (r Row) MarshalYAML() (any, error) {
+	out := make(yaml.MapSlice, len(r))
+	for i, c := range r {
+		out[i] = yaml.MapItem{Key: c.Column, Value: c.Value}
 	}
 	return out, nil
 }

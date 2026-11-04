@@ -1,0 +1,7 @@
+version: 1
+name: stock
+output: { line_ending: lf }
+columns:
+  - { name: sku,     type: string, required: true }
+  - { name: updated, type: date, format: "YYYY-MM-DD" }
+  - { name: qty,     type: integer }

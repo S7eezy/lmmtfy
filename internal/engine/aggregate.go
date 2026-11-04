@@ -143,6 +143,12 @@ func (r *run) firstPass() error {
 			}
 		}
 
+		if p.keep != nil {
+			if keep, err := r.keeps(w); err == nil && !keep {
+				continue // dropped rows are not in aggregates
+			}
+		}
+
 		done := true
 		for i, a := range p.aggregates {
 			acc := accs[i]

@@ -73,7 +73,11 @@ func Validate(name, mappingPath, input string, stdout, stderr io.Writer) int {
 	for _, c := range check.Columns {
 		switch c.Status {
 		case "found":
-			fmt.Fprintf(tw, "  %s\t← %s\t\n", c.Target, c.Source)
+			if c.Alias != "" {
+				fmt.Fprintf(tw, "  %s\t← %s\tfound as %q (alias)\n", c.Target, c.Source, c.Alias)
+			} else {
+				fmt.Fprintf(tw, "  %s\t← %s\t\n", c.Target, c.Source)
+			}
 		case "computed":
 			fmt.Fprintf(tw, "  %s\t(formula)\t\n", c.Target)
 		case "constant":
@@ -85,12 +89,15 @@ func Validate(name, mappingPath, input string, stdout, stderr io.Writer) int {
 				"omitted": "missing, omitted from output",
 				"error":   "MISSING (required)",
 			}[c.Action]
+			if c.Suggestion != "" {
+				what += fmt.Sprintf(", did you mean %q?", c.Suggestion)
+			}
 			fmt.Fprintf(tw, "  %s\t← %s\t%s\n", c.Target, c.Source, what)
 		}
 	}
 	tw.Flush()
 	if len(check.Unused) > 0 {
-		fmt.Fprintf(stdout, "  dropped source columns: %s\n", strings.Join(check.Unused, ", "))
+		fmt.Fprintf(stdout, "  input columns not used: %s\n", strings.Join(check.Unused, ", "))
 	}
 	if !check.OK {
 		fmt.Fprintf(stdout, "input is not compatible with the mapping: required source columns are missing\n")

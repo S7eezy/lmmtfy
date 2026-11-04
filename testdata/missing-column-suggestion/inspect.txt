@@ -1,0 +1,13 @@
+<case>/input.csv
+  encoding     utf-8
+  delimiter    ","
+  header       line 1
+  footer       none
+  trim         no
+  null tokens  none
+  sample       1 rows (whole file)
+
+  #  column      target      type     ok    details               examples
+  1  order_id    order_id    integer  100%                        "1"
+  2  ORDER_DATE  ORDER_DATE  date     100%  formats YYYY-MM-DD    "2024-02-03"
+  3  Montant     Montant     decimal  100%  decimal ".", scale 1  "12.5"

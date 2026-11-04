@@ -1,0 +1,3 @@
+ERROR line 6, column qty: "x" is not an integer (row rejected)
+summary: ok, 6 rows read, 3 written, 2 duplicate, 1 rejected, 1 with errors, <duration>
+  qty: 1 error

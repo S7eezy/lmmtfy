@@ -146,7 +146,7 @@ func (p *Plan) compileFormulas(issues *config.Issues) {
 		value := func(t expr.Type) error { return expr.Assignable(t, c.typ) }
 		condition := func(t expr.Type) error {
 			if t != expr.Boolean && t != expr.Empty {
-				return fmt.Errorf("a condition is true or false, but this gives a %s value: compare it, like [column] > 0", t)
+				return errNotCondition(t)
 			}
 			return nil
 		}
@@ -231,8 +231,10 @@ func (p *Plan) compileFormulas(issues *config.Issues) {
 	}
 
 	p.compileAggregates(issues)
+	p.compileKeep(issues)
 
-	// Helpers ordering a batch's rows are read like formulas read them.
+	// Helpers ordering a batch's rows, and the columns keep_rows_when
+	// reads, are read like formulas read them.
 	var orderBy []int
 	if g := m.Group; g != nil {
 		for _, c := range p.nodes {
@@ -240,6 +242,9 @@ func (p *Plan) compileFormulas(issues *config.Issues) {
 				orderBy = append(orderBy, c.id)
 			}
 		}
+	}
+	if p.keep != nil {
+		orderBy = append(orderBy, p.keep.Columns...)
 	}
 
 	for _, c := range append(p.nodes, nil) {
@@ -277,6 +282,7 @@ func (p *Plan) compileFormulas(issues *config.Issues) {
 		}
 	}
 	p.orderColumns(issues)
+	p.keepFirst()
 }
 
 // cases are the conditions of a column: the first true one gives the
@@ -325,20 +331,7 @@ func (p *Plan) compileAggregates(issues *config.Issues) {
 	// computes columns without them, which changes only cells that would
 	// get the default, and aggregates leave those out as empty. So a column
 	// can default to the lowest of its own values.
-	memo := map[int]bool{}
-	var needs func(c *column) bool
-	needs = func(c *column) bool {
-		if v, ok := memo[c.id]; ok {
-			return v
-		}
-		memo[c.id] = false // cycles are reported by orderColumns
-		v := len(c.aggs) > c.defaultAggs
-		for _, id := range c.refs {
-			v = v || needs(p.nodes[id])
-		}
-		memo[c.id] = v
-		return v
-	}
+	needs := p.needsAggregates()
 
 	pass := map[int]bool{}
 	var add func(id int)

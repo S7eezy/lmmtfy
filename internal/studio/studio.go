@@ -229,6 +229,10 @@ type Result struct {
 	// Trace is how the traced column was filled in the first rows
 	// (previews only).
 	Trace []engine.TraceRow `json:"trace,omitempty"`
+	// Sources are the input rows of each output row, and of each rejected
+	// row (previews only): what a test saved from that row reads.
+	Sources         [][]config.Row `json:"sources,omitempty"`
+	RejectedSources [][]config.Row `json:"rejected_sources,omitempty"`
 }
 
 // TraceRows is the number of rows traced for the column panel.
@@ -268,6 +272,13 @@ func PreviewOutput(path string, m *config.Mapping, opts PreviewOptions) (*Result
 	}
 	if opts.Trace != "" {
 		job.Trace = &engine.Trace{Column: opts.Trace, Max: TraceRows}
+	}
+	job.Sources = func(written bool, rows []config.Row) {
+		if written {
+			res.Sources = append(res.Sources, rows)
+		} else {
+			res.RejectedSources = append(res.RejectedSources, rows)
+		}
 	}
 	sum, err := plan.Run(job)
 	res.Summary = sum
@@ -504,4 +515,53 @@ func ConverterName(m *config.Mapping, goos, arch string) string {
 		return name + ".exe"
 	}
 	return fmt.Sprintf("%s-%s-%s", name, goos, arch)
+}
+
+// RunTests replays the saved tests of a mapping being edited. Nil when the
+// mapping has errors.
+func RunTests(m *config.Mapping) []engine.TestResult {
+	plan, _ := compile(m)
+	if plan == nil {
+		return nil
+	}
+	return plan.RunTests()
+}
+
+// MakeTest builds a test from input rows: it expects what the mapping
+// gives now, output rows and errors.
+func MakeTest(m *config.Mapping, name string, input []config.Row) (*config.Test, error) {
+	plan, issues := compile(m)
+	if plan == nil {
+		for _, is := range issues {
+			if is.Severity == "error" {
+				return nil, fmt.Errorf("fix the mapping first: %s: %s", is.Path, is.Message)
+			}
+		}
+	}
+	t := config.Test{Name: name, Input: input}
+	res := plan.RunTest(t)
+	t.Output, t.Errors = res.Output, res.Errors
+	return &t, nil
+}
+
+// InputCheck is how a file fits a mapping, before converting it: each
+// column, the input columns not used, and whether it can be converted.
+type InputCheck = engine.InputCheck
+
+// CheckInput reads the header of a file and checks it against a mapping.
+func CheckInput(path string, m *config.Mapping) (*InputCheck, error) {
+	plan, issues := compile(m)
+	if plan == nil {
+		for _, is := range issues {
+			if is.Severity == "error" {
+				return nil, fmt.Errorf("%s: %s", is.Path, is.Message)
+			}
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return plan.CheckInput(f)
 }

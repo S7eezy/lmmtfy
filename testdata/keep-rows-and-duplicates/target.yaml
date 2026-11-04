@@ -1,0 +1,8 @@
+version: 1
+name: orders
+output: { line_ending: lf }
+columns:
+  - { name: line,     type: integer }
+  - { name: order_id, type: integer, required: true }
+  - { name: status,   type: string }
+  - { name: amount,   type: decimal, scale: 2 }

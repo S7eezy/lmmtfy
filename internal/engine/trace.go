@@ -104,6 +104,9 @@ func CheckFormula(m *config.Mapping, path, src string) (string, error) {
 			}
 		}
 	}
+	if path == keepPath {
+		return checkKeep(m, p, src)
+	}
 	var sc expr.Scope = scope{p, self}
 	if isDefault {
 		sc = noValue{sc}
@@ -158,4 +161,25 @@ func checkCombined(p *Plan, self *column, prog *expr.Program) error {
 		}
 	}
 	return nil
+}
+
+// checkKeep checks keep_rows_when as it is typed: syntax and types first,
+// with the position of an error, then what the whole mapping allows.
+func checkKeep(m *config.Mapping, p *Plan, src string) (string, error) {
+	prog, err := expr.Compile(src, noValue{scope{p, &column{slot: -1, id: -1}}})
+	if err != nil {
+		return "", err
+	}
+	if prog.Type != expr.Boolean && prog.Type != expr.Empty {
+		return prog.Type.String(), &expr.Error{Msg: errNotCondition(prog.Type).Error()}
+	}
+	with := *m
+	with.KeepRowsWhen = src
+	_, issues := Compile(&with)
+	for _, is := range issues {
+		if is.Path == keepPath && is.Severity == config.SeverityError {
+			return prog.Type.String(), &expr.Error{Msg: is.Message}
+		}
+	}
+	return prog.Type.String(), nil
 }
