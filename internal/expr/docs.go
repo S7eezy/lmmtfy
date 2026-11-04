@@ -60,6 +60,7 @@ var docs = []Doc{
 	{"last", "(value)", "the last value that is not empty, over the whole file (or batch)", "Aggregates"},
 	{"lowest", "(value)", "the smallest value (earliest date) over the whole file (or batch)", "Aggregates"},
 	{"highest", "(value)", "the largest value (latest date) over the whole file (or batch)", "Aggregates"},
+	{"most_frequent", "(value)", "the value that occurs most often over the whole file (or batch); on a tie, the one that got there first", "Aggregates"},
 	{"total", "(number)", "the sum over the whole file (or batch), e.g. total([price] * [qty])", "Aggregates"},
 	{"mean", "(number)", "the average over the whole file (or batch)", "Aggregates"},
 	{"count", "(value)", "the number of values that are not empty; count() counts rows", "Aggregates"},

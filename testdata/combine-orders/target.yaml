@@ -20,4 +20,5 @@ columns:
   - { name: total_price, type: decimal, scale: 2 }
   - { name: mean_price, type: decimal, scale: 2 }
   - { name: lines, type: integer }
+  - { name: common_qty, type: integer }
   - { name: line_no, type: integer }

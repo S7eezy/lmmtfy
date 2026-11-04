@@ -301,7 +301,7 @@ func TestAggregates(t *testing.T) {
 
 	// Fold three rows: price 2, 3, empty with qty 10.
 	acc := map[string]*Accumulator{}
-	for _, kind := range []string{"first", "last", "lowest", "highest", "total", "mean", "count"} {
+	for _, kind := range []string{"first", "last", "lowest", "highest", "most_frequent", "total", "mean", "count"} {
 		q, err := Compile(kind+"([price])", testScope{})
 		if err != nil {
 			t.Fatal(err)
@@ -314,14 +314,14 @@ func TestAggregates(t *testing.T) {
 			a.Add(val)
 		}
 	}
-	want := map[string]string{"first": "decimal(3)", "last": "decimal(5)", "lowest": "decimal(2)", "highest": "decimal(5)",
+	want := map[string]string{"first": "decimal(3)", "last": "decimal(5)", "lowest": "decimal(2)", "highest": "decimal(5)", "most_frequent": "decimal(3)",
 		"total": "decimal(10)", "mean": "decimal(3.3333333333333333333333333333333333)", "count": "integer(3)"}
 	for kind, a := range acc {
 		if got := a.Result().String(); got != want[kind] {
 			t.Errorf("%s = %s, want %s", kind, got, want[kind])
 		}
 	}
-	if !acc["first"].Done() || acc["last"].Done() {
+	if !acc["first"].Done() || acc["last"].Done() || acc["most_frequent"].Done() {
 		t.Error("Done")
 	}
 	if got := NewAccumulator(total).Result(); !got.IsEmpty() {
@@ -346,3 +346,44 @@ func TestAggregates(t *testing.T) {
 		t.Error("row() inside an aggregate counted as a row reference")
 	}
 }
+
+func TestMostFrequent(t *testing.T) {
+	tests := []struct {
+		typ    Type
+		values []string
+		want   string
+	}{
+		{String, []string{"bolt", "nut", "nut", "", "", "", "bolt", "nut"}, "string(nut)"},
+		{String, []string{"Nut", "nut", "nut"}, "string(nut)"},          // case matters
+		{String, []string{"bolt", "nut", "nut", "bolt"}, "string(nut)"}, // tie: nut got to 2 first
+		{Decimal, []string{"2.50", "1", "2.5"}, "decimal(2.5)"},         // 2.50 and 2.5 are one value
+		{Date, []string{"2026-01-02", "2026-01-03", "2026-01-03"}, "date(2026-01-03)"},
+		{String, []string{"", ""}, "empty"},
+	}
+	for _, tt := range tests {
+		p, err := Compile("most_frequent([x])", typedScope{tt.typ})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Type != tt.typ {
+			t.Errorf("type %s, want %s", p.Type, tt.typ)
+		}
+		a := NewAccumulator(p.Aggregates[0])
+		for _, s := range tt.values {
+			v, err := Parse(tt.typ, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.Add(v)
+		}
+		if got := a.Result().String(); got != tt.want {
+			t.Errorf("most_frequent(%q) = %s, want %s", tt.values, got, tt.want)
+		}
+	}
+}
+
+// typedScope has one column, x, of a given type.
+type typedScope struct{ t Type }
+
+func (s typedScope) Column(name string) (int, Type, bool) { return 0, s.t, name == "x" }
+func (typedScope) Value() (Type, bool)                    { return Empty, false }

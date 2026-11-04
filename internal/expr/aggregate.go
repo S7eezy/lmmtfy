@@ -9,13 +9,13 @@ import (
 // values with an Accumulator and puts the result in Env.Aggregates[Slot]
 // before the formula runs.
 type Aggregate struct {
-	Kind string   // first, last, lowest, highest, total, mean, count
+	Kind string   // first, last, lowest, highest, most_frequent, total, mean, count
 	Arg  *Program // nil for count()
 	Type Type     // result type
 	Slot int      // index in Env.Aggregates, set by the engine
 }
 
-var aggregates = map[string]bool{"first": true, "last": true, "lowest": true, "highest": true, "total": true, "mean": true, "count": true}
+var aggregates = map[string]bool{"first": true, "last": true, "lowest": true, "highest": true, "most_frequent": true, "total": true, "mean": true, "count": true}
 
 // Columns lists the columns the argument reads; none for count().
 func (a *Aggregate) Columns() []int {
@@ -49,7 +49,7 @@ func (c *compiler) aggregate(n *call) (compiled, error) {
 		sub.prog.Type, sub.prog.eval = e.t, e.fn
 		agg.Arg = sub.prog
 		switch n.name {
-		case "first", "last":
+		case "first", "last", "most_frequent":
 			agg.Type = e.t
 		case "lowest", "highest":
 			if e.t == Boolean {
@@ -90,10 +90,12 @@ func (aggregateScope) Value() (Type, bool) { return Empty, false }
 // Empty values are left out.
 type Accumulator struct {
 	agg    *Aggregate
-	value  Value // first, last, lowest, highest
+	value  Value // first, last, lowest, highest, most_frequent
 	sum    decimal.Decimal
-	values int64 // non-empty values added
-	rows   int64 // rows added, for count()
+	values int64            // non-empty values added
+	rows   int64            // rows added, for count()
+	seen   map[string]int64 // most_frequent: occurrences by canonical text
+	top    int64            // most_frequent: occurrences of value
 }
 
 // NewAccumulator starts folding for an aggregate.
@@ -120,6 +122,17 @@ func (a *Accumulator) Add(v Value) {
 	case "highest":
 		if a.values == 1 || compare(v, a.value) > 0 {
 			a.value = v
+		}
+	case "most_frequent":
+		// Equal values have the same canonical text (2.50 and 2.5 too).
+		// A tie keeps the value that reached the count first.
+		if a.seen == nil {
+			a.seen = map[string]int64{}
+		}
+		key := v.Canonical()
+		a.seen[key]++
+		if n := a.seen[key]; n > a.top {
+			a.top, a.value = n, v
 		}
 	case "total", "mean":
 		a.sum = a.sum.Add(v.n)

@@ -22,4 +22,6 @@ columns:
   total_price: { formula: "total([price] * [qty])" }
   mean_price: { formula: "mean([price])" }
   lines: { formula: "count()" }
+  # B3 has qty 1 twice; a batch of distinct values gives its first row's.
+  common_qty: { formula: "most_frequent([qty])" }
   line_no: { sequence: {} }

@@ -1,6 +1,7 @@
 <script>
   // A default value: fixed, or computed once per file from a column (its
-  // first, lowest or highest value) or by a formula over aggregates.
+  // first, lowest, highest or most frequent value) or by a formula over
+  // aggregates.
   import FormulaField from './FormulaField.svelte'
   import * as M from './mapping.js'
 
@@ -8,9 +9,9 @@
   // field means "no default"). placeholder: for the fixed value.
   let { r, mapping, path, col, sources = [], detectedFor = () => null, label = 'Default value', placeholder = '', onvalue } = $props()
 
-  const KINDS = [['first', 'First value of'], ['lowest', 'Lowest / earliest of'], ['highest', 'Highest / latest of'], ['last', 'Last value of']]
+  const KINDS = [['first', 'First value of'], ['lowest', 'Lowest / earliest of'], ['highest', 'Highest / latest of'], ['last', 'Last value of'], ['most_frequent', 'Most frequent value of']]
   const parsed = $derived.by(() => {
-    const m = (r.default_formula ?? '').match(/^\s*(first|last|lowest|highest)\(\s*\[((?:[^\]]|\]\])+)\]\s*\)\s*$/i)
+    const m = (r.default_formula ?? '').match(/^\s*(first|last|lowest|highest|most_frequent)\(\s*\[((?:[^\]]|\]\])+)\]\s*\)\s*$/i)
     return m ? { kind: m[1].toLowerCase(), column: m[2].replaceAll(']]', ']').trim() } : null
   })
   let formulaMode = $state(false)

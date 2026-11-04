@@ -424,7 +424,7 @@ export const joinList = (a) => (a ?? []).join(', ')
 // usesAggregates reports whether a formula of the mapping aggregates
 // values over the file (lowest, total, ...).
 export function usesAggregates(m) {
-  const agg = /\b(first|last|lowest|highest|total|mean|count)\s*\(/i
+  const agg = /\b(first|last|lowest|highest|most_frequent|total|mean|count)\s*\(/i
   return allRules(m).some(([, , r]) => [r.formula, r.default_formula, r.else_formula, ...(r.cases ?? []).flatMap((k) => [k.when, k.then_formula])]
     .some((f) => f && agg.test(M_stripText(f))))
 }
