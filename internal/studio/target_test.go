@@ -41,6 +41,22 @@ func TestDraftTargetKeepsTheExampleFormat(t *testing.T) {
 	}
 }
 
+func TestDraftTargetRequiresFullColumns(t *testing.T) {
+	example := filepath.Join(t.TempDir(), "expected.csv")
+	// name always set; note sometimes empty or a null token; extra never set.
+	os.WriteFile(example, []byte("id,name,note,extra\n1,bolt,,\n2,nut,N/A,\n3,washer,ok,\n"), 0o644)
+	d, err := DraftTarget(example)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"id": true, "name": true, "note": false, "extra": false}
+	for _, c := range d.Target.Columns {
+		if c.Required != want[c.Name] {
+			t.Errorf("%s: required = %v, want %v", c.Name, c.Required, want[c.Name])
+		}
+	}
+}
+
 func TestCheckAndSaveTarget(t *testing.T) {
 	dir := t.TempDir()
 	tg, err := LoadTarget("../../testdata/acme-orders/target.yaml")

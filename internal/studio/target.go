@@ -23,8 +23,10 @@ type TargetDraft struct {
 // software expects. Unlike a mapping's draft, which normalizes the output
 // (ISO dates, "." decimals), it keeps what the example shows, since that is
 // the format to produce: header names as written, delimiter, encoding,
-// line endings, date formats, separators. The columns of the result are in
-// the order of Detection.Columns.
+// line endings, date formats, separators. A column with a value on every
+// row of the example is required: an empty value there is then an error
+// rather than a gap the receiving software finds later. The columns of the
+// result are in the order of Detection.Columns.
 func DraftTarget(path string) (*TargetDraft, error) {
 	res, err := detect.File(path, detect.Options{})
 	if err != nil {
@@ -53,7 +55,7 @@ func DraftTarget(path string) (*TargetDraft, error) {
 	names, _ = engine.NormalizeHeader(names)
 
 	for i, c := range res.Columns {
-		col := config.TargetColumn{Name: names[i], Type: c.Type}
+		col := config.TargetColumn{Name: names[i], Type: c.Type, Required: c.Values > 0 && c.Empty == 0}
 		switch c.Type {
 		case "date", "datetime", "time":
 			if len(c.Formats) > 0 {

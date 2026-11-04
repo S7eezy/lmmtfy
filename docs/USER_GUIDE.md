@@ -95,7 +95,7 @@ Opening a saved mapping goes straight to the column editor; open a sample CSV fi
 
 A target file is shared by every mapping that uses it, so Studio only changes it in the **target editor**, never by saving a mapping.
 
-- **New target**: **from an example of the expected file** (a file the receiving software exports or documents, not a partner's file) or **blank**. From an example, Studio drafts the columns with their exact header names, types and formats, and the file format: delimiter, encoding, line endings, date formats, decimal and thousands separators.
+- **New target**: **from an example of the expected file** (a file the receiving software exports or documents, not a partner's file) or **blank**. From an example, Studio drafts the columns with their exact header names, types and formats, and the file format: delimiter, encoding, line endings, date formats, decimal and thousands separators. Columns with a value on every row of the example are ticked as **required** (an empty value there is then an error, rejecting the row with `skip_row`); the others are optional. Untick the columns that may be empty in other files: an example with few rows proves little.
 - **Open a target** to change its columns (name, type, required, default, constraints, output format; drag to reorder) or, in **Settings**, its name and file format.
 - **New mapping for this target** starts a new mapping with the target already chosen.
 - **Edit target…** in a mapping opens the editor on its target file. Back in the mapping, the target is reloaded: renamed columns are renamed in the mapping too, and the Review list shows what changed.

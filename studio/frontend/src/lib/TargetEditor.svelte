@@ -6,7 +6,7 @@
   // renaming or removing a column of a saved file says so. renames() tells
   // the caller which columns were renamed since the editor opened, so that a
   // mapping it was opened from can follow.
-  import { Columns3, Plus, Search, GripVertical, Trash2, TriangleAlert, CircleAlert, Sparkles, FileOutput, Check, ListChecks, Info, Users } from '@lucide/svelte'
+  import { Columns3, Plus, Search, GripVertical, Trash2, TriangleAlert, CircleAlert, Sparkles, FileOutput, Check, ListChecks, Info, Users, CircleCheck } from '@lucide/svelte'
   import ConfidenceBadge from './ConfidenceBadge.svelte'
   import TypeIcon from './TypeIcon.svelte'
   import Section from './Section.svelte'
@@ -107,6 +107,14 @@
       <span class="spacer"></span>
       <button onclick={add}><Plus size={14} /> Add column</button>
     </div>
+    {#if detection}
+      {@const rows = detection.sample_rows}
+      <div class="shared row" class:warn={rows < 20}>
+        <CircleCheck size={14} />
+        <span>Columns with a value on every row of the example ({rows} {rows === 1 ? 'row' : 'rows'}) are ticked as <strong>required</strong>: an empty value there will be an error.
+          {#if rows < 20}With so few rows, check them: untick columns that may be empty.{:else}Untick columns that may be empty in other files.{/if}</span>
+      </div>
+    {/if}
     {#if path}
       <div class="shared row"><Users size={14} /> <span>Mappings using <strong class="mono">{path.split(/[\\/]/).pop()}</strong> see every saved change. They refer to columns by name: renaming or removing one leaves their rule behind.</span></div>
     {/if}
@@ -141,7 +149,8 @@
                   </select>
                 </div>
               </td>
-              <td class="req-col"><input type="checkbox" checked={!!col.required} onchange={(e) => (e.target.checked ? (col.required = true) : delete col.required)} aria-label="Required" /></td>
+              <td class="req-col"><input type="checkbox" checked={!!col.required} onchange={(e) => (e.target.checked ? (col.required = true) : delete col.required)} aria-label="Required"
+                title={d ? (d.empty ? `${d.empty} empty ${d.empty === 1 ? 'value' : 'values'} in the example` : 'A value on every row of the example') : ''} /></td>
               {#if detection}<td class="det-col">{#if d}<ConfidenceBadge detected={d} compact />{/if}</td>{/if}
               <td class="status">
                 {#if problems.some((p) => p.severity === 'error')}<span class="state error" title={problems.map((p) => p.message).join('\n')}><CircleAlert size={15} /></span>
@@ -220,6 +229,7 @@
   .shared { gap: 7px; padding: 6px 12px; font-size: 12px; background: var(--neutral-soft); border-bottom: 1px solid var(--line); color: var(--muted); align-items: flex-start; }
   .shared :global(svg) { flex-shrink: 0; margin-top: 1px; }
   .shared strong { color: var(--text); }
+  .shared.warn { background: var(--warn-soft); color: var(--warn); }
   .list { flex: 1; min-height: 0; padding-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 600; padding: 6px 8px; position: sticky; top: 0; background: var(--panel); z-index: 2; }
