@@ -162,13 +162,6 @@ func TestSaveAndLoad(t *testing.T) {
 	if h1 != h2 {
 		t.Error("saving and loading changed the mapping")
 	}
-
-	// Invalid mappings are not saved.
-	bad := fromEditor(t, l.Mapping)
-	bad.Name = ""
-	if _, err := SaveMapping(bad, filepath.Join(dir, "bad.yaml"), "", false); err == nil {
-		t.Error("invalid mapping saved")
-	}
 }
 
 func TestConvertAndExport(t *testing.T) {
@@ -219,5 +212,32 @@ func TestRecentFiles(t *testing.T) {
 	got := RecentFiles()
 	if len(got) != maxRecent-1 || got[0].Path != files[3] || got[0].Kind != "mapping" {
 		t.Errorf("recent = %+v", got)
+	}
+}
+
+func TestSaveUnfinishedMapping(t *testing.T) {
+	l, err := LoadMapping("../../testdata/acme-orders/mapping.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := fromEditor(t, l.Mapping)
+	broken := m.Columns["order_date"]
+	broken.Formula = "[nowhere] +"
+	m.Columns["order_date"] = broken
+
+	path := filepath.Join(t.TempDir(), "draft.mapping.yaml")
+	issues, err := SaveMapping(m, path, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(issues, func(i Issue) bool { return i.Severity == "error" && i.Path == "columns.order_date.formula" }) {
+		t.Errorf("issues = %+v", issues)
+	}
+	back, err := LoadMapping(path)
+	if err != nil || back.Mapping.Columns["order_date"].Formula != "[nowhere] +" {
+		t.Fatalf("unfinished mapping does not load back: %v", err)
+	}
+	if _, issues := compile(back.Mapping); !slices.ContainsFunc(issues, func(i Issue) bool { return i.Severity == "error" }) {
+		t.Error("errors gone after loading")
 	}
 }

@@ -12,8 +12,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
@@ -52,6 +54,7 @@ func main() {
 		Bind:          []any{a},
 		DragAndDrop:   &options.DragAndDrop{EnableFileDrop: true},
 		Windows:       win,
+		Menu:          appMenu(),
 		// Without macOS options, Wails disables the zoom button, and with it
 		// full screen: the window must say it can zoom.
 		Mac: &mac.Options{DisableZoom: false},
@@ -59,4 +62,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// appMenu is the macOS menu bar. Without an Edit menu, macOS text fields
+// lose their shortcuts (cut, copy, paste, select all, undo), and without
+// the application menu ⌘Q does nothing. The page still sees each shortcut
+// first: Studio's own undo answers ⌘Z outside text fields. Windows and
+// Linux need none: their shortcuts work without a menu bar.
+func appMenu() *menu.Menu {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	return menu.NewMenuFromItems(menu.AppMenu(), menu.EditMenu(), menu.WindowMenu())
 }

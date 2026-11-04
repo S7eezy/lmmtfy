@@ -89,6 +89,10 @@ The home screen has two sides: **mappings** and **targets**, each with its recen
    - The other tabs preview the converted first 100 rows, rejected rows and messages. Problems with the mapping mark their column; saving and converting wait until they are fixed.
 6. **Save** writes the mapping (YAML), and a new target file with it. **Convert…** converts a whole file. **Export converter…** builds converters for Windows, Linux and macOS.
 
+Unfinished work can be saved at any step, errors included, and finished later: Studio says how many errors are left, and opening the file shows them again. Nothing converts with a mapping that has errors (Convert, Export, the CLI and converters refuse it) until they are fixed. The same goes for targets.
+
+**Undo** and **Redo** (the arrows in the top bar; `Ctrl+Z` and `Ctrl+Y`, or `⌘Z` and `⇧⌘Z` on a Mac) step back and forth through the changes to the mapping or target being edited, since it was opened. Typing is one step once you pause. In a text field, the shortcuts undo the typing in that field, as usual.
+
 Opening a saved mapping goes straight to the column editor; open a sample CSV file to get the preview. Every step stays reachable from the steps at the top, the Target step included: there you can link another target file, copy the current one into a new file, or keep the target inside the mapping.
 
 ### Targets

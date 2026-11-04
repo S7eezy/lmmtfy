@@ -11,7 +11,8 @@
   // through bindings, and previews are refreshed shortly after each change.
   // targetMode says where the target lives: "file" (linked, locked), "new"
   // (written to its own file on the next save) or "inline".
-  import { FilePlus2, Settings2, Play, Package, Save, FileCog, Upload, Target, ArrowLeft, Sheet, SquareDashed, Sun, Moon } from '@lucide/svelte'
+  import { FilePlus2, Settings2, Play, Package, Save, FileCog, Upload, Target, ArrowLeft, Sheet, SquareDashed, Sun, Moon, Undo2, Redo2 } from '@lucide/svelte'
+  import { History, patch } from './lib/history.svelte.js'
   import { theme, toggleTheme } from './lib/theme.svelte.js'
   import * as api from './lib/api.js'
   import * as M from './lib/mapping.js'
@@ -80,8 +81,8 @@
   const dirty = $derived(mappingDirty || targetDirty)
   const sources = $derived(M.sources(raw, mapping?.input?.header ?? true))
   const errorCount = $derived(issues.filter((i) => i.severity === 'error').length)
-  const tgtErrors = $derived(tgtIssues.filter((i) => i.severity === 'error').length)
   const fileName = (p) => p.split(/[\\/]/).pop()
+  const isMac = /Mac/.test(navigator.platform)
   const dirOf = (p) => p.replace(/[^\\/]+$/, '')
   const slug = (s) => M.targetName(s || 'target').toLowerCase().replaceAll('_', '-')
   const recentTargets = $derived(recent.filter((r) => r.kind === 'target'))
@@ -92,6 +93,33 @@
 
   // The window asks before closing with unsaved changes (see app.go).
   $effect(() => { api.setDirty(dirty) })
+
+  // Undo and redo: one history for the mapping (its target mode and file
+  // included), one for the target editor. A new document starts a new one.
+  const mappingHistory = new History()
+  const targetHistory = new History()
+  $effect(() => { if (mapping) mappingHistory.track(mapping, mappingState()) })
+  $effect(() => { if (tgt) targetHistory.track(tgt.id, canonical(tgt.target)) })
+  const history = $derived(screen === 'tedit' && tgt ? targetHistory : mapping && STEPS.includes(screen) ? mappingHistory : null)
+
+  function undo(redo = false) {
+    const h = history
+    const s = h && (redo ? h.redo() : h.undo())
+    if (!s) return
+    const v = JSON.parse(s)
+    if (h === targetHistory) {
+      patch(tgt.target, v)
+    } else {
+      patch(mapping, v.mapping)
+      targetMode = v.targetMode
+      targetPath = v.targetPath
+    }
+  }
+
+  // In a text field, the field's own undo applies (the text typed there);
+  // elsewhere, Studio's.
+  const typing = (el) => el?.isContentEditable || el?.tagName === 'TEXTAREA' ||
+    (el?.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type))
 
   // Dropping a file on the window opens it.
   api.onFileDrop((paths) => {
@@ -114,16 +142,28 @@
   }
 
   function keydown(e) {
-    if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's')) return
-    if (screen === 'edit') {
+    const key = e.key.toLowerCase()
+    if ((e.metaKey || e.ctrlKey) && (key === 'z' || key === 'y') && !e.altKey) {
+      if (!history || typing(e.target)) return
       e.preventDefault()
-      if (errorCount === 0) save(e.shiftKey)
-      else toast('error', 'Fix the errors before saving.')
+      undo(key === 'y' || e.shiftKey)
+      return
+    }
+    if (!((e.metaKey || e.ctrlKey) && key === 's')) return
+    if (mapping && STEPS.includes(screen)) {
+      e.preventDefault()
+      save(e.shiftKey)
     } else if (screen === 'tedit') {
       e.preventDefault()
-      if (tgtErrors === 0) saveTarget(e.shiftKey)
-      else toast('error', 'Fix the errors before saving.')
+      saveTarget(e.shiftKey)
     }
+  }
+
+  // Unfinished work is saved too: say what is left to fix.
+  function savedToast(what, issues) {
+    const n = (issues ?? []).filter((i) => i.severity === 'error').length
+    if (n) toast('warn', `${what}, with ${n} ${n === 1 ? 'error' : 'errors'} left to fix: nothing converts with it until then.`)
+    else toast('ok', what + '.')
   }
 
   // Raw preview while reading; output preview and checks while editing.
@@ -289,7 +329,7 @@
       if (await api.exists(tp) && !(await ask(`${fileName(tp)} already exists next to the mapping. Replace it with this mapping's new target?`, { title: 'Replace a target file', yes: 'Replace it' }))) return
     }
     try {
-      await api.saveMapping(mapping, path, tp, writeTarget)
+      const saveIssues = await api.saveMapping(mapping, path, tp, writeTarget)
       mappingPath = path
       if (writeTarget) {
         targetMode = 'file'
@@ -300,9 +340,9 @@
       saved = mappingState()
       reached = STEPS.length - 1
       api.remember('mapping', path).then(loadRecent)
-      toast('ok', writeTarget
-        ? `Saved ${fileName(path)} and its new target ${fileName(tp)}. The target is now a file of its own: change it with Edit target.`
-        : `Saved ${fileName(path)}.`)
+      savedToast(writeTarget
+        ? `Saved ${fileName(path)} and its new target ${fileName(tp)}. The target is now a file of its own: change it with Edit target`
+        : `Saved ${fileName(path)}`, saveIssues)
     } catch (e) { fail(e) }
   }
 
@@ -353,12 +393,12 @@
       if (!path) return
     }
     try {
-      await api.saveTarget(tgt.target, path)
+      const saveIssues = await api.saveTarget(tgt.target, path)
       tgt.path = path
       tgt.saved = canonical(tgt.target)
       tgt.renames = targetEditor?.renames() ?? {}
       api.remember('target', path).then(loadRecent)
-      toast('ok', `Saved ${fileName(path)}.`)
+      savedToast(`Saved ${fileName(path)}`, saveIssues)
     } catch (e) { fail(e) }
   }
 
@@ -429,8 +469,9 @@
       {:else if tgt.path && !targetDirty}
         <button onclick={() => openCSV('', tgt.path)} title="Map a CSV file onto this target"><FilePlus2 size={14} /> New mapping for this target</button>
       {/if}
-      <button onclick={() => (dialog = 'tsettings')} title="Name and file format"><Settings2 size={14} /> Settings</button>
-      <button class="primary" onclick={() => saveTarget()} disabled={tgtErrors > 0} title="Save (Ctrl/⌘ S, with Shift: save as)"><Save size={14} /> Save</button>
+      {@render undoRedo()}
+      <button onclick={() => (dialog = 'tsettings')} title="Name and file format"><Settings2 size={14} /> <span class="label">Settings</span></button>
+      <button class="primary" onclick={() => saveTarget()} title="Save (Ctrl/⌘ S, with Shift: save as)"><Save size={14} /> Save</button>
     {:else if mapping}
       <span class="doc-title">
         <FileCog size={15} />
@@ -440,12 +481,14 @@
       <span class="divider"></span>
       <Stepper current={screen} enabled={STEPS.map((s, i) => i <= reached && (s !== 'read' || !!csvPath))} onstep={goto} />
       <span class="spacer"></span>
+      {@render undoRedo()}
       {#if screen === 'edit'}
-        <button onclick={() => (dialog = 'settings')} title="Mapping settings"><Settings2 size={14} /> Settings</button>
-        <button onclick={() => (dialog = 'convert')} disabled={errorCount > 0} title="Convert a file"><Play size={14} /> Convert</button>
-        <button onclick={() => (dialog = 'export')} disabled={errorCount > 0} title="Build standalone converters"><Package size={14} /> Export</button>
-        <button class="primary" onclick={() => save()} disabled={errorCount > 0} title="Save (Ctrl/⌘ S, with Shift: save as)"><Save size={14} /> Save</button>
+        {@const blocked = errorCount ? `Fix the ${errorCount === 1 ? 'error' : `${errorCount} errors`} first` : ''}
+        <button onclick={() => (dialog = 'settings')} title="Mapping settings"><Settings2 size={14} /> <span class="label">Settings</span></button>
+        <button onclick={() => (dialog = 'convert')} disabled={errorCount > 0} title={blocked || 'Convert a file'}><Play size={14} /> <span class="label">Convert</span></button>
+        <button onclick={() => (dialog = 'export')} disabled={errorCount > 0} title={blocked || 'Build standalone converters'}><Package size={14} /> <span class="label">Export</span></button>
       {/if}
+      <button class={screen === 'edit' ? 'primary' : ''} onclick={() => save()} title="Save (Ctrl/⌘ S, with Shift: save as). Unfinished work can be saved and finished later."><Save size={14} /> Save</button>
     {:else}
       <span class="spacer"></span>
     {/if}
@@ -453,6 +496,13 @@
       {#if theme.dark}<Sun size={15} />{:else}<Moon size={15} />{/if}
     </button>
   </header>
+
+  {#snippet undoRedo()}
+    <span class="undo-redo">
+      <button class="icon" onclick={() => undo()} disabled={!history?.canUndo} title="Undo ({isMac ? '⌘Z' : 'Ctrl+Z'})" aria-label="Undo"><Undo2 size={15} /></button>
+      <button class="icon" onclick={() => undo(true)} disabled={!history?.canRedo} title="Redo ({isMac ? '⇧⌘Z' : 'Ctrl+Y'})" aria-label="Redo"><Redo2 size={15} /></button>
+    </span>
+  {/snippet}
 
   <main>
     {#if screen === 'home'}
@@ -526,6 +576,10 @@
   .bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
   .bar button { display: inline-flex; gap: 5px; align-items: center; }
   .bar .theme { padding: 5px; color: var(--muted); }
+  .undo-redo { display: inline-flex; gap: 2px; }
+  /* Narrow windows: secondary buttons keep their icon (and tooltip) only. */
+  @media (max-width: 1100px) { .bar .label { display: none; } }
+  .undo-redo button { padding: 5px; }
   .bar .theme:hover { color: var(--text); }
   .brand { font-weight: 700; font-size: 15px; color: var(--text); gap: 7px !important; }
   .brand span { color: var(--accent); font-weight: 500; }

@@ -2,7 +2,6 @@ package studio
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"slices"
@@ -137,12 +136,10 @@ func CheckTarget(t *config.Target) []Issue {
 	return slices.DeleteFunc(issues, func(i Issue) bool { return !strings.HasPrefix(i.Path, "target") })
 }
 
-// SaveTarget writes a target file. The target must be valid.
+// SaveTarget writes a target file, with its issues. Like a mapping, an
+// unfinished target is saved too: mappings using it report its errors.
 func SaveTarget(t *config.Target, path string) ([]Issue, error) {
 	issues := CheckTarget(t)
-	if slices.ContainsFunc(issues, func(i Issue) bool { return i.Severity == "error" }) {
-		return issues, errors.New("the target has errors: fix them before saving")
-	}
 	data, err := config.FormatTarget(t)
 	if err != nil {
 		return issues, err

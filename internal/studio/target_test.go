@@ -79,12 +79,16 @@ func TestCheckAndSaveTarget(t *testing.T) {
 		t.Fatalf("saved target: %v %+v", err, back)
 	}
 
-	// Type options are checked, and invalid targets are not saved.
+	// Type options are checked. An unfinished target is saved anyway, with
+	// its issues, and loads back as it was.
 	tg.Columns[1].Format = "YYYY-QQ"
 	tg.Columns = append(tg.Columns, config.TargetColumn{Name: "order_id", Type: "string"})
 	issues, err := SaveTarget(tg, path)
-	if err == nil {
-		t.Fatal("invalid target saved")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back, err := LoadTarget(path); err != nil || len(back.Columns) != 7 || back.Columns[1].Format != "YYYY-QQ" {
+		t.Errorf("unfinished target: %v %+v", err, back)
 	}
 	text := ""
 	for _, i := range issues {

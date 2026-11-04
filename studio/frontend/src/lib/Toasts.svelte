@@ -1,7 +1,7 @@
 <script>
-  import { CircleCheck, CircleAlert, Info, X } from '@lucide/svelte'
+  import { CircleCheck, CircleAlert, TriangleAlert, Info, X } from '@lucide/svelte'
   import { toasts, dismiss } from './toast.svelte.js'
-  const icons = { ok: CircleCheck, error: CircleAlert, info: Info }
+  const icons = { ok: CircleCheck, warn: TriangleAlert, error: CircleAlert, info: Info }
 </script>
 
 <div class="toasts" aria-live="polite">
@@ -23,6 +23,8 @@
   .toast.ok :global(svg:first-child) { color: var(--high); }
   .toast.error { border-left: 4px solid var(--error); }
   .toast.error :global(svg:first-child) { color: var(--error); }
+  .toast.warn { border-left: 4px solid var(--warn); }
+  .toast.warn :global(svg:first-child) { color: var(--warn); }
   .toast.info :global(svg:first-child) { color: var(--accent); }
   @keyframes in { from { transform: translateY(8px); opacity: 0; } }
 </style>

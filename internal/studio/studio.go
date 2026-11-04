@@ -351,12 +351,13 @@ func LoadMapping(path string) (*Loaded, error) {
 // refers to that target file (relative path), and writes the target there
 // only with writeTarget: a target file linked by a mapping is shared, and
 // is only changed by saving it in the target editor. Without a targetPath
-// the target is written inline. The mapping must be valid.
+// the target is written inline.
+//
+// An unfinished mapping is saved too, with its issues returned: work in
+// progress must not be lost. Opening it shows the errors again, and nothing
+// converts with it (CLI, converters, Studio) until they are fixed.
 func SaveMapping(m *config.Mapping, path, targetPath string, writeTarget bool) ([]Issue, error) {
-	plan, issues := compile(m)
-	if plan == nil {
-		return issues, errors.New("the mapping has errors: fix them before saving")
-	}
+	_, issues := compile(m)
 	ref := ""
 	if targetPath != "" && writeTarget {
 		data, err := config.FormatTarget(m.Target.Inline)
