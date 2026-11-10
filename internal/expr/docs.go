@@ -63,5 +63,6 @@ var docs = []Doc{
 	{"most_frequent", "(value)", "the value that occurs most often over the whole file (or batch); on a tie, the one that got there first", "Aggregates"},
 	{"total", "(number)", "the sum over the whole file (or batch), e.g. total([price] * [qty])", "Aggregates"},
 	{"mean", "(number)", "the average over the whole file (or batch)", "Aggregates"},
+	{"std", "(number)", "the standard deviation over the whole file (or batch), as a sample (n - 1, like STDEV); empty with fewer than 2 values", "Aggregates"},
 	{"count", "(value)", "the number of values that are not empty; count() counts rows", "Aggregates"},
 }

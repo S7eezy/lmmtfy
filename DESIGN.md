@@ -608,7 +608,7 @@ Functions (names are case-insensitive):
 | Text | `upper`, `lower`, `trim`, `len`, `left(t, n)`, `right(t, n)`, `mid(t, start, n)`, `replace(t, find, with)`, `pad_left(t, n, char)`, `split_part(t, sep, n)`, `text(x)` |
 | Dates | `add_days`, `add_months`, `days_between(a, b)`, `year`, `month`, `day`, `hour`, `minute`, `from_epoch(x, "s"\|"ms"\|"us")`, `to_epoch(x, unit)`, `today()`, `now()` |
 | Row | `row()`: 1-based data row number in the input file |
-| Aggregates | `first(x)`, `last(x)`, `lowest(x)`, `highest(x)`, `most_frequent(x)`, `total(x)`, `mean(x)`, `count()`, `count(x)` |
+| Aggregates | `first(x)`, `last(x)`, `lowest(x)`, `highest(x)`, `most_frequent(x)`, `total(x)`, `mean(x)`, `std(x)`, `count()`, `count(x)` |
 
 Semantics:
 
@@ -621,7 +621,7 @@ Semantics:
 - **Total and deterministic**: no loops, no file or network access, no user-defined functions. `today()` and `now()` are the time the conversion started, the same for every row; Studio marks formulas using them as changing from run to run.
 - **Dependencies**: formulas may reference other columns and are evaluated in dependency order; a cycle is a validation error that names it. When a column fails and rejects the row, formulas reading it are not evaluated: the row has one error, not a cascade.
 - `if(cond, a)` without else gives empty when the condition is false. `row()` is the data row number (1 = first row after the header).
-- **Aggregates** range over the whole file, or over the current batch in grouped mode. Their argument can be a formula (`total([price] * [qty])`) but not another aggregate, nor `value`. Empty and unparsable values are left out (unparsable ones counted in a warning); with no values left, the result is empty (`count` gives 0, `count()` counts rows). `first` and `last` are the first and last values that are not empty. `lowest` and `highest` on text compare alphabetically. `most_frequent` is the value occurring most often (text is case-sensitive; equal numbers such as 2.5 and 2.50 are one value); on a tie, the value that reached that count first. It keeps a count per distinct value: per batch that is small, over a whole file it grows with the number of distinct values. `mean` gives a decimal.
+- **Aggregates** range over the whole file, or over the current batch in grouped mode. Their argument can be a formula (`total([price] * [qty])`) but not another aggregate, nor `value`. Empty and unparsable values are left out (unparsable ones counted in a warning); with no values left, the result is empty (`count` gives 0, `count()` counts rows). `first` and `last` are the first and last values that are not empty. `lowest` and `highest` on text compare alphabetically. `most_frequent` is the value occurring most often (text is case-sensitive; equal numbers such as 2.5 and 2.50 are one value); on a tie, the value that reached that count first. It keeps a count per distinct value: per batch that is small, over a whole file it grows with the number of distinct values. `mean` gives a decimal. `std` is the sample standard deviation (divided by n − 1, like a spreadsheet's STDEV), a decimal, empty with fewer than two values; its sums are exact and only the square root is rounded, to 34 decimal places.
 
 The cell pipeline of §5 gains one step: after parsing, the formula runs with `value` bound to the parsed value; validation and formatting follow.
 

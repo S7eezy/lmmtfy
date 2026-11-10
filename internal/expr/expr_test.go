@@ -1,6 +1,8 @@
 package expr
 
 import (
+	"github.com/shopspring/decimal"
+
 	"strings"
 	"testing"
 	"time"
@@ -301,7 +303,7 @@ func TestAggregates(t *testing.T) {
 
 	// Fold three rows: price 2, 3, empty with qty 10.
 	acc := map[string]*Accumulator{}
-	for _, kind := range []string{"first", "last", "lowest", "highest", "most_frequent", "total", "mean", "count"} {
+	for _, kind := range []string{"first", "last", "lowest", "highest", "most_frequent", "total", "mean", "std", "count"} {
 		q, err := Compile(kind+"([price])", testScope{})
 		if err != nil {
 			t.Fatal(err)
@@ -315,7 +317,8 @@ func TestAggregates(t *testing.T) {
 		}
 	}
 	want := map[string]string{"first": "decimal(3)", "last": "decimal(5)", "lowest": "decimal(2)", "highest": "decimal(5)", "most_frequent": "decimal(3)",
-		"total": "decimal(10)", "mean": "decimal(3.3333333333333333333333333333333333)", "count": "integer(3)"}
+		"total": "decimal(10)", "mean": "decimal(3.3333333333333333333333333333333333)",
+		"std": "decimal(1.5275252316519466688626823979093362)", "count": "integer(3)"}
 	for kind, a := range acc {
 		if got := a.Result().String(); got != want[kind] {
 			t.Errorf("%s = %s, want %s", kind, got, want[kind])
@@ -334,6 +337,7 @@ func TestAggregates(t *testing.T) {
 		{"highest([ok])", "true and false have no order"},
 		{"first(value)", "has no source"},
 		{"count(1, 2)", "count takes at most 1 argument"},
+		{"std([name])", "expected a number"},
 	} {
 		if _, err := Compile(c.src, testScope{}); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want %q", c.src, err, c.want)
@@ -387,3 +391,54 @@ type typedScope struct{ t Type }
 
 func (s typedScope) Column(name string) (int, Type, bool) { return 0, s.t, name == "x" }
 func (typedScope) Value() (Type, bool)                    { return Empty, false }
+
+func TestStd(t *testing.T) {
+	tests := []struct {
+		typ    Type
+		values []string
+		want   string
+	}{
+		{Integer, []string{"2", "4", "4", "4", "5", "5", "7", "9"}, "decimal(2.1380899352993950774764278470380282)"},
+		{Decimal, []string{"1.20", "8.00", "", "0.02", "3.40", "6.00"}, "decimal(3.303767546302251574316518815065445)"},
+		{Decimal, []string{"1", "1"}, "decimal(0)"},
+		// Large values close together: no cancellation, the sums are exact.
+		{Decimal, []string{"1e20", "1e20", "1.000000000000000000001e20"}, "decimal(0.0577350269189625764509148780501957)"},
+		{Decimal, []string{"4"}, "empty"}, // one value has no spread
+		{Decimal, []string{"", ""}, "empty"},
+	}
+	for _, tt := range tests {
+		p, err := Compile("std([x])", typedScope{tt.typ})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Type != Decimal {
+			t.Errorf("type %s, want decimal", p.Type)
+		}
+		a := NewAccumulator(p.Aggregates[0])
+		for _, s := range tt.values {
+			v, err := Parse(tt.typ, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.Add(v)
+		}
+		if got := a.Result().String(); got != tt.want {
+			t.Errorf("std(%q) = %s, want %s", tt.values, got, tt.want)
+		}
+	}
+}
+
+func TestSqrt(t *testing.T) {
+	for _, c := range []struct{ x, want string }{
+		{"2", "1.4142135623730950488016887242096981"},
+		{"0.0000000000000000000000000000000004", "0.0000000000000000200000000000000000"},
+		{"1e400", "1e200"},
+		{"0", "0"},
+	} {
+		x, _ := decimal.NewFromString(c.x)
+		want, _ := decimal.NewFromString(c.want)
+		if got := sqrt(x, divPrecision); !got.Equal(want) {
+			t.Errorf("sqrt(%s) = %s, want %s", c.x, got, want)
+		}
+	}
+}

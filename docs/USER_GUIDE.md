@@ -274,7 +274,7 @@ columns:
 | Text | `upper`, `lower`, `trim`, `len`, `left(t, n)`, `right(t, n)`, `mid(t, start, n)`, `replace(t, find, with)`, `pad_left(t, n, "0")`, `split_part(t, sep, n)`, `text(x)` |
 | Dates | `date("2024-01-31")`, `datetime(…)`, `add_days`, `add_months`, `days_between(a, b)`, `year`, `month`, `day`, `hour`, `minute`, `from_epoch(x, "s"/"ms"/"us")`, `to_epoch(…)`, `today()`, `now()` |
 | Rows | `row()` |
-| Aggregates | `first`, `last`, `lowest`, `highest`, `most_frequent`, `total`, `mean`, `count(x)`, `count()`: over the whole file, or the batch when rows are combined |
+| Aggregates | `first`, `last`, `lowest`, `highest`, `most_frequent`, `total`, `mean`, `std`, `count(x)`, `count()`: over the whole file, or the batch when rows are combined |
 
 Numbers are exact (no floating-point rounding). An empty value stays empty through arithmetic, counts as `""` in text, and makes comparisons false. A default, when used, is final: the formula does not run on it. Formulas are checked when the mapping is loaded: unknown columns, wrong types and a result the column cannot take are errors that point at the character. A failing formula (division by zero…) is a bad value, handled by `on_error`.
 

@@ -1,6 +1,8 @@
 package expr
 
 import (
+	"math"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -9,13 +11,13 @@ import (
 // values with an Accumulator and puts the result in Env.Aggregates[Slot]
 // before the formula runs.
 type Aggregate struct {
-	Kind string   // first, last, lowest, highest, most_frequent, total, mean, count
+	Kind string   // first, last, lowest, highest, most_frequent, total, mean, std, count
 	Arg  *Program // nil for count()
 	Type Type     // result type
 	Slot int      // index in Env.Aggregates, set by the engine
 }
 
-var aggregates = map[string]bool{"first": true, "last": true, "lowest": true, "highest": true, "most_frequent": true, "total": true, "mean": true, "count": true}
+var aggregates = map[string]bool{"first": true, "last": true, "lowest": true, "highest": true, "most_frequent": true, "total": true, "mean": true, "std": true, "count": true}
 
 // Columns lists the columns the argument reads; none for count().
 func (a *Aggregate) Columns() []int {
@@ -61,7 +63,7 @@ func (c *compiler) aggregate(n *call) (compiled, error) {
 				return compiled{}, err
 			}
 			agg.Type = e.t
-		case "mean":
+		case "mean", "std":
 			if err := want(e, "a number", Type.numeric); err != nil {
 				return compiled{}, err
 			}
@@ -90,8 +92,9 @@ func (aggregateScope) Value() (Type, bool) { return Empty, false }
 // Empty values are left out.
 type Accumulator struct {
 	agg    *Aggregate
-	value  Value // first, last, lowest, highest, most_frequent
-	sum    decimal.Decimal
+	value  Value            // first, last, lowest, highest, most_frequent
+	sum    decimal.Decimal  // total, mean, std
+	sumSq  decimal.Decimal  // std: sum of squares
 	values int64            // non-empty values added
 	rows   int64            // rows added, for count()
 	seen   map[string]int64 // most_frequent: occurrences by canonical text
@@ -136,6 +139,10 @@ func (a *Accumulator) Add(v Value) {
 		}
 	case "total", "mean":
 		a.sum = a.sum.Add(v.n)
+	case "std":
+		// Exact sums: decimals do not lose precision as values add up.
+		a.sum = a.sum.Add(v.n)
+		a.sumSq = a.sumSq.Add(v.n.Mul(v.n))
 	}
 }
 
@@ -161,6 +168,53 @@ func (a *Accumulator) Result() Value {
 			return Value{}
 		}
 		return Number(a.sum.DivRound(decimal.NewFromInt(a.values), divPrecision), Decimal)
+	case "std":
+		if a.values < 2 {
+			return Value{}
+		}
+		return Number(sampleStd(a.sum, a.sumSq, a.values), Decimal)
 	}
 	return Convert(a.value, a.agg.Type)
+}
+
+// sampleStd is the sample standard deviation (n - 1 in the denominator, as
+// in spreadsheets' STDEV) of n values from their sum and sum of squares:
+//
+//	sqrt((n·Σx² - (Σx)²) / (n(n-1)))  =  sqrt((n·Σx² - (Σx)²) · n(n-1)) / (n(n-1))
+//
+// The numerator is exact, so the only rounding is in the square root,
+// taken of an exact number and then divided.
+func sampleStd(sum, sumSq decimal.Decimal, n int64) decimal.Decimal {
+	count := decimal.NewFromInt(n)
+	den := count.Mul(decimal.NewFromInt(n - 1))
+	num := count.Mul(sumSq).Sub(sum.Mul(sum))
+	return sqrt(num.Mul(den), divPrecision+2).DivRound(den, divPrecision)
+}
+
+// sqrt is the square root of x >= 0 to a number of decimal places, by
+// Newton's method from a close guess.
+func sqrt(x decimal.Decimal, places int32) decimal.Decimal {
+	if x.Sign() <= 0 {
+		return decimal.Zero
+	}
+	var g decimal.Decimal
+	if f := math.Sqrt(x.InexactFloat64()); f > 0 && !math.IsInf(f, 0) {
+		g = decimal.NewFromFloat(f)
+	} else {
+		// Too large or small for a float: 10^(half the magnitude) is
+		// within a factor of 10 of the root.
+		magnitude := int32(x.NumDigits()) + x.Exponent()
+		g = decimal.New(1, magnitude/2)
+	}
+	two := decimal.NewFromInt(2)
+	eps := decimal.New(1, -places-1)
+	for range 100 { // quadratic: a few steps from a close guess
+		next := g.Add(x.DivRound(g, places+2)).DivRound(two, places+2)
+		done := next.Sub(g).Abs().LessThan(eps)
+		g = next
+		if done {
+			break
+		}
+	}
+	return g.Round(places)
 }
